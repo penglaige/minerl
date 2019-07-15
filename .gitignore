@@ -1,0 +1,11 @@
+human_data/
+.DS_Store
+.python-version
+src/logs
+src/tutorial.ipynb
+__pychache__
+logs/
+models/
+perform_records/
+.ipynb_checkpoints/
+__pycache__/
