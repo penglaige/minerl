@@ -213,7 +213,7 @@ class Agent():
                                 #print("a: ",a)
                                 act.append(torch.argmax(a).item())
                             action = self.get_action(act)
-                            print("action: ",action)
+                            #print("action: ",action)
                     else:
                         act = self.get_random_action()
                         action = self.get_action(act)
