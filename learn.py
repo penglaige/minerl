@@ -202,9 +202,9 @@ class Agent():
                     if sample > threshold:
                         obs = torch.from_numpy(observations).unsqueeze(0).type(dtype) / 255.0
                         with torch.no_grad():
-                            action = self.Q(obs).numpy()
+                            #action = self.Q(obs).numpy()
                             
-                            action = np.hsplit(action, self.separate)
+                            action = self.divide(action, self.separate)
 
                             act = []
                             for a in action:
