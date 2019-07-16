@@ -120,7 +120,6 @@ agent = Agent(
         non_pixel_input_size=non_pixel_input_size,
         add_non_pixel=add_non_pixel,
         in_feature = in_feature,
-        non_pixel_input_size = non_pixel_input_size,
         hidden_actions = hidden_actions,
         hidden_value = hidden_value,
         num_branches = num_branches,
