@@ -27,7 +27,7 @@ dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTens
 dlongtype = torch.cuda.LongTensor if torch.cuda.is_available() else torch.LongTensor
 
 def to_np(x):
-    return x.data.cpu().numpu()
+    return x.data.cpu().numpy()
 
 # learner
 class Agent():

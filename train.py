@@ -71,7 +71,7 @@ logger.setLevel(logging.DEBUG)
 # Command Parser
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
-gpu = None
+gpu = True
 print("current available gpu numbers: %d" %torch.cuda.device_count())
 if (gpu != None):
     if torch.cuda.is_available():
