@@ -167,9 +167,11 @@ class Agent():
         self.mean_episode_reward      = -float('nan')
         self.best_mean_episode_reward = -float('inf')
         self.last_obs = None
+        
         self.Log_Every_N_Steps = 60000
         self.Save_Model_Every_N_Steps = 60000
         self.Save_Reward_Every_N_EPs = 10
+        
         ##########################
         self.separate = [self.num_actions_for_branch[0]]
         for i in range(1,len(self.num_actions_for_branch)-1):
@@ -198,18 +200,20 @@ class Agent():
                 else:
                     # epsilon greedy exploration
                     sample = random.random()
-                    threshold = self.exploration.value(ep)
+                    threshold = self.exploration.value(self.t)
                     if sample > threshold:
                         obs = torch.from_numpy(observations).unsqueeze(0).type(dtype) / 255.0
                         with torch.no_grad():
-                            #action = self.Q(obs).numpy()
+                            action = self.Q(obs)
                             
                             action = self.divide(action, self.separate)
 
                             act = []
                             for a in action:
-                                act.append(np.argmax(a,axis=1)[0])
+                                #print("a: ",a)
+                                act.append(torch.argmax(a).item())
                             action = self.get_action(act)
+                            print("action: ",action)
                     else:
                         act = self.get_random_action()
                         action = self.get_action(act)
@@ -380,7 +384,7 @@ class Agent():
         print('Timestep %d' %(self.t))
         print("learning started? %d" % (self.t >= self.learning_starts))
         print("num_param_updates:%d" % self.num_param_updates)
-        print("mean reward (100 episodes) %f" % self.mean_episode_reward)
+        print("mean reward (20 episodes) %f" % self.mean_episode_reward)
         print("best mean reward %f" % self.best_mean_episode_reward)
         print("exploration %f" % self.exploration.value(self.t))
         print("learning_rate %f" % self.optimizer_spec.kwargs['lr'])
