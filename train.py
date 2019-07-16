@@ -23,7 +23,7 @@ import socket
 
 # Global Variables
 BATCH_SIZE = 32
-REPLAY_BUFFER_SIZE = 500000
+REPLAY_BUFFER_SIZE = 800000
 FRAME_HISTORY_LEN = 4
 TARGET_UPDATE_FREQ = 2000
 GAMMA = 0.99
@@ -43,6 +43,24 @@ optimizer = OptimizerSpec(
     kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS)
 )
 
+# models parameter
+action_space = []
+convs = [(32,7,3),(64,4,2),(64,3,1)]
+non_pixel_layer = [64]
+non_pixel_input_size = 2
+add_non_pixel = False
+in_feature = 7*7*64
+hidden_actions = [128]
+hidden_value = [128]
+num_actions_for_branch = [2,2,2,2,2,2,2,2,2,36,36]
+aggregator="reduceLocalMean"
+prioritized_replay=True
+prioritized_replay_alpha=0.6
+prioritized_replay_beta0=0.4
+prioritized_replay_beta_iters=1600000
+prioritized_replay_eps=0.0001
+dueling_dqn = True
+double_dqn = True
 # argparse
 train = True
 
@@ -52,7 +70,7 @@ if not train:
     BATCH_SIZE = 32
     REPLAY_BUFFER_SIZE = 50000
     FRAME_HISTORY_LEN = 4
-    TARGET_UPDATE_FREQ = 2000
+    TARGET_UPDATE_FREQ = 1000
     GAMMA = 0.99
     LEARNING_FREQ = 4
     LEARNING_RATE = 0.00025
@@ -60,6 +78,7 @@ if not train:
     EPS = 0.01
     EXPLORATION_SCHEDULE = LinearSchedule(6000, 0.1)
     LEARNING_STARTS = 6000
+    prioritized_replay_beta_iters=30000
 else:
     num_reps = 300
 # logger
@@ -80,22 +99,6 @@ if (gpu != None):
 
 seed = 0
 
-# models parameter
-action_space = []
-convs = [(32,7,3),(64,4,2),(64,3,1)]
-non_pixel_layer = [64]
-non_pixel_input_size = 2
-in_feature = 7*7*64
-hidden_actions = [128]
-hidden_value = [128]
-num_actions_for_branch = [2,2,2,2,2,2,2,2,2,36,36]
-aggregator="reduceLocalMean"
-prioritized_replay=True
-prioritized_replay_alpha=0.6
-prioritized_replay_beta0=0.4
-prioritized_replay_beta_iters=2e6
-dueling_dqn = True
-double_dqn = True
 
 # Environment 
 env = gym.make('MineRLNavigateDense-v0')
@@ -114,6 +117,8 @@ agent = Agent(
         action_space=action_space,
         convs = convs,
         non_pixel_layer=non_pixel_layer,
+        non_pixel_input_size=non_pixel_input_size,
+        add_non_pixel=add_non_pixel,
         in_feature = in_feature,
         non_pixel_input_size = non_pixel_input_size,
         hidden_actions = hidden_actions,
@@ -128,6 +133,7 @@ agent = Agent(
         prioritized_replay_alpha=prioritized_replay_alpha,
         prioritized_replay_beta0=prioritized_replay_beta0,
         prioritized_replay_beta_iters=prioritized_replay_beta_iters,
+        prioritized_replay_eps=prioritized_replay_eps,
         batch_size=BATCH_SIZE,gamma=GAMMA,
         learning_starts=LEARNING_STARTS,
         learning_freq=LEARNING_FREQ,

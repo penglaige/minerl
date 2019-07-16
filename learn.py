@@ -40,6 +40,7 @@ class Agent():
         convs = [(32,7,3),(64,4,2),(64,3,1)],
         non_pixel_layer=[64],
         non_pixel_input_size = 2,
+        add_non_pixel=False,
         in_feature = 7*7*64,
         hidden_actions = [128],
         hidden_value = [128],
@@ -53,7 +54,8 @@ class Agent():
         prioritized_replay=True,
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
-        prioritized_replay_beta_iters=2e6,
+        prioritized_replay_beta_iters=1600000,
+        prioritized_replay_eps=0.00001,
         batch_size=32,gamma=0.99,
         learning_starts=50000,
         learning_freq=4,
@@ -86,6 +88,19 @@ class Agent():
             takes in env and the number of steps executed so far.
         replay_buffer_size: int
             How many memories to store in the replay buffer.
+        prioritized_replay: True
+            if True prioritized replay buffer will be used.
+        prioritized_replay_alpha: float
+            alpha parameter for prioritized replay buffer
+        prioritized_replay_beta0: float
+            initial value of beta for prioritized replay buffer
+        prioritized_replay_beta_iters: int
+            number of iterations over which beta will be annealed from initial value
+            to 1.0. If set to None equals to max_timesteps.
+        prioritized_replay_eps: float
+            epsilon to add to the unified TD error for updating priorities.
+            Erratum: The camera-ready copy of this paper incorrectly reported 1e-8. 
+            The value used to produece the results is 1e8.
         batch_size: int
             How many transitions to sample each time experience is replayed.
         gamma: float
@@ -112,6 +127,7 @@ class Agent():
         self.convs = convs
         self.non_pixel_layer = non_pixel_layer
         self.non_pixel_input_size = non_pixel_input_size
+        self.add_non_pixel = add_non_pixel
         self.in_feature = in_feature
         self.hidden_actions = hidden_actions
         self.hidden_value = hidden_value
@@ -124,9 +140,11 @@ class Agent():
         self.num_episodes = num_episodes
         self.stopping_criterion = stopping_criterion
         self.replay_buffer_size = replay_buffer_size
+        self.prioritized_replay = prioritized_replay
         self.prioritized_replay_alpha = prioritized_replay_alpha
         self.prioritized_replay_beta0 = prioritized_replay_beta0
         self.prioritized_replay_beta_iters = prioritized_replay_beta_iters
+        self.prioritized_replay_eps = prioritized_replay_eps
         self.batch_size = batch_size
         self.gamma = gamma
         self.learning_starts = learning_starts
@@ -143,23 +161,39 @@ class Agent():
         self.in_channels = self.input_shape[2]
 
         # define Q target and Q
-        self.Q = self.q_func(self.convs, self.in_channels, 
-                            self.in_feature, self.hidden_actions, 
-                            self.hidden_value, self.num_branches, 
-                            self.num_actions_for_branch, self.aggregator).type(dtype)
-        self.Q_target = self.q_func(self.convs, self.in_channels, 
-                            self.in_feature, self.hidden_actions, 
-                            self.hidden_value, self.num_branches, 
-                            self.num_actions_for_branch, self.aggregator).type(dtype)
+        if not self.add_non_pixel:
+            self.Q = self.q_func(self.convs, self.in_channels, 
+                                self.in_feature, self.hidden_actions, 
+                                self.hidden_value, self.num_branches, 
+                                self.num_actions_for_branch, self.aggregator).type(dtype)
+            self.Q_target = self.q_func(self.convs, self.in_channels, 
+                                self.in_feature, self.hidden_actions, 
+                                self.hidden_value, self.num_branches, 
+                                self.num_actions_for_branch, self.aggregator).type(dtype)
+        else:
+            self.Q = self.q_func(self.non_pixel_input_size, self.non_pixel_layer,
+                                self.convs, self.in_channels, 
+                                self.in_feature, self.hidden_actions, 
+                                self.hidden_value, self.num_branches, 
+                                self.num_actions_for_branch, self.aggregator).type(dtype)
+            self.Q_target = self.q_func(self.non_pixel_input_size, self.non_pixel_layer,
+                                self.convs, self.in_channels, 
+                                self.in_feature, self.hidden_actions, 
+                                self.hidden_value, self.num_branches, 
+                                self.num_actions_for_branch, self.aggregator).type(dtype)
 
         # initialize optimizer
         self.optimizer = self.optimizer_spec.constructor(self.Q.parameters(), **self.optimizer_spec.kwargs)
 
         # create repaly buffer 
         if(prioritized_replay == True):
-            self.replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_size, self.frame_history_len, self.prioritized_replay_alpha, self.num_branches)
+            self.replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_size, self.frame_history_len, self.prioritized_replay_alpha, self.num_branches,self.non_pixel_input_size,self.add_non_pixel)
+            self.beta_schedule = LinearSchedule(prioritized_replay_beta_iters,
+                                            initial_p=prioritized_replay_beta0,
+                                            final_p=1.0)
         else:
-            self.replay_buffer = ReplayBuffer(self.replay_buffer_size, self.frame_history_len)
+            self.replay_buffer = ReplayBuffer(self.replay_buffer_size, self.frame_history_len,self.non_pixel_input_size, self.add_non_pixel)
+            self.beta_schedule = None
 
         ###### RUN SETTING ####
         self.t = 0
@@ -189,7 +223,7 @@ class Agent():
                 ### Step the agent and store the transition
                 # store last frame, returned idx used later
                 
-                last_stored_frame_idx = self.replay_buffer.store_frame(self.last_obs)
+                last_stored_frame_idx = self.replay_buffer.store_frame(self.last_obs, None)
 
                 # get observations to input to Q netword
                 observations = self.replay_buffer.encode_recent_observation()
@@ -258,102 +292,224 @@ class Agent():
     def train(self):
         # Sample transition batch from replay memory
         # done_mash = 1 if next state is end of episode
-        obs_t, act_t, rew_t, obs_tp1, done_mask, weights, idxes = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
+        if self.add_non_pixel:
+            obs_t, act_t, rew_t, obs_tp1, done_mask, non_pixel_obs_t, non_pixel_obs_tp1, weights, idxes = self.replay_buffer.sample(self.batch_size, beta=self.beta_schedule.value(self.t))
+            non_pixel_obs_t = Variable(torch.from_numpy(non_pixel_obs_t)).type(dtype)
+            non_pixel_obs_tp1 = Variable(torch.from_numpy(non_pixel_obs_tp1)).type(dtype)
+        else:
+            obs_t, act_t, rew_t, obs_tp1, done_mask, weights, idxes = self.replay_buffer.sample(self.batch_size, beta=self.beta_schedule.value(self.t))
         obs_t = Variable(torch.from_numpy(obs_t)).type(dtype) / 255.0
         act_t = Variable(torch.from_numpy(act_t)).type(dlongtype)
         rew_t = Variable(torch.from_numpy(rew_t)).type(dtype)
         obs_tp1 = Variable(torch.from_numpy(obs_tp1)).type(dtype) / 255.0
         done_mask = Variable(torch.from_numpy(done_mask)).type(dtype)
 
-        
-        # input batches to networks
-        # get the Q values for current observations for each action dimension
-        q_values = self.Q(obs_t)
-        q_values = self.divide(q_values, self.separate)
-        #q_values = np.hsplit(q_values, self.separate)
-        q_s_a = []
-        for dim in range(self.num_branches):
-            selected_a = act_t[:,dim].view(act_t.size(0),-1)
-            q_value = q_values[dim]
-            q_s_a_dim = q_value.gather(1, selected_a)
-            q_s_a.append(q_s_a_dim)
-            #if dim == 0:
-            #    q_s_a = q_s_a_dim
-            #else:
-            #    q_s_a = torch.cat((q_s_a, q_s_a_dim),1)
-
-        # calculate target Q value:
-        if self.double_dqn:
-            # ---------------
-            #   double DQN
-            # ---------------
-
-            # get the Q values for best actions in obs_tp1
-            # based off the current Q network
-            # max(Q(s', a', theta_i)) wrt a'
-            q_tp1_values = self.Q(obs_tp1).detach()
-            q_tp1_values = self.divide(q_tp1_values, self.separate)
-            a_prime = []
+        if self.add_non_pixel:
+            # input batches to networks
+            # get the Q values for current observations for each action dimension
+            q_values = self.Q(obs_t,non_pixel_obs_t)
+            q_values = self.divide(q_values, self.separate)
+            #q_values = np.hsplit(q_values, self.separate)
+            q_s_a = []
             for dim in range(self.num_branches):
-                q_tp1_value = q_tp1_values[dim]
-                _, a_prime_dim = q_tp1_value.max(1)
-                a_prime.append(a_prime_dim)
+                selected_a = act_t[:,dim].view(act_t.size(0),-1)
+                q_value = q_values[dim]
+                q_s_a_dim = q_value.gather(1, selected_a)
+                q_s_a.append(q_s_a_dim)
+                #if dim == 0:
+                #    q_s_a = q_s_a_dim
+                #else:
+                #    q_s_a = torch.cat((q_s_a, q_s_a_dim),1)
 
-            # get Q values from frozen network for next state and chosen action
-            q_target_tp1_values = self.Q_target(obs_tp1).detach()
-            q_target_tp1_values = self.divide(q_target_tp1_values, self.separate)
+            # calculate target Q value:
+            if self.double_dqn:
+                # ---------------
+                #   double DQN
+                # ---------------
 
-            expected_state_action_values = []
-            
-            for dim in range(self.num_branches):
-                q_target_tp1_value = q_target_tp1_values[dim]
-                q_target_s_a_prime_dim = q_target_tp1_value.gather(1,a_prime[dim].unsqueeze(1))
-                q_target_s_a_prime_dim = q_target_s_a_prime_dim.squeeze()
+                # get the Q values for best actions in obs_tp1
+                # based off the current Q network
+                # max(Q(s', a', theta_i)) wrt a'
+                q_tp1_values = self.Q(obs_tp1,non_pixel_obs_tp1).detach()
+                q_tp1_values = self.divide(q_tp1_values, self.separate)
+                a_prime = []
+                for dim in range(self.num_branches):
+                    q_tp1_value = q_tp1_values[dim]
+                    _, a_prime_dim = q_tp1_value.max(1)
+                    a_prime.append(a_prime_dim)
 
-                #if current state is end of episode, then there if no next Q value
-                q_target_s_a_prime_dim = (1 - done_mask) * q_target_s_a_prime_dim
+                # get Q values from frozen network for next state and chosen action
+                q_target_tp1_values = self.Q_target(obs_tp1,non_pixel_obs_tp1).detach()
+                q_target_tp1_values = self.divide(q_target_tp1_values, self.separate)
 
-                # TODO ： mean td error
-                expected_state_action_values_dim = (rew_t + self.gamma * q_target_s_a_prime_dim).view(self.batch_size, -1)
-                #print("expected_state_action_values_dim size: ",expected_state_action_values_dim.size())
-                expected_state_action_values.append(expected_state_action_values_dim)
+                expected_state_action_values = []
+                
+                for dim in range(self.num_branches):
+                    q_target_tp1_value = q_target_tp1_values[dim]
+                    q_target_s_a_prime_dim = q_target_tp1_value.gather(1,a_prime[dim].unsqueeze(1))
+                    q_target_s_a_prime_dim = q_target_s_a_prime_dim.squeeze()
 
-            # calculate loss
-            branch_losses = []
-            for dim in range(self.num_branches):
-                loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_state_action_values[dim])
-                #print("loss_dim: ",loss_dim)
-                branch_losses.append(loss_dim)
-            
-            loss = sum(branch_losses) / self.num_branches
+                    #if current state is end of episode, then there if no next Q value
+                    q_target_s_a_prime_dim = (1 - done_mask) * q_target_s_a_prime_dim
+
+                    # TODO ： mean td error
+                    expected_state_action_values_dim = (rew_t + self.gamma * q_target_s_a_prime_dim).view(self.batch_size, -1)
+                    #print("expected_state_action_values_dim size: ",expected_state_action_values_dim.size())
+                    expected_state_action_values.append(expected_state_action_values_dim)
+
+                # calculate loss
+                branch_losses = []
+                for dim in range(self.num_branches):
+                    td_error_dim = q_s_a[dim] - expected_state_action_values[dim]
+                    if dim == 0:
+                        td_error = torch.abs(td_error_dim)
+                    else:
+                        td_error += torch.abs(td_error_dim)
+                    loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_state_action_values[dim])
+                    #print("loss_dim: ",loss_dim)
+                    branch_losses.append(loss_dim)
+                
+                loss = sum(branch_losses) / self.num_branches
+
+            else:
+                # -----------------
+                #   regular DQN
+                # -----------------
+
+                # get the Q values for best actions in obs_tp1
+                # based off frozen Q network
+                # max(Q(s', a', theta_i_frozen)) wrt a'
+                q_tp1_values = self.Q_target(obs_tp1,non_pixel_obs_tp1).detach()
+                q_tp1_values = self.divide(q_tp1_values, self.separate)
+                q_s_a_prime = []
+                a_prime = []
+                loss = 0
+                for dim in range(self.num_branches):
+                    q_tp1_value = q_tp1_values[dim]
+                    q_s_a_prime_dim, a_prime_dim = q_tp1_value.max(1)
+
+                    q_s_a_prime_dim = (1 - done_mask) * q_s_a_prime_dim
+                    q_s_a_prime.append(q_s_a_prime_dim)
+                    a_prime.append(a_prime_dim)
+
+                    expected_state_action_values_dim = rew_t + self.gamma * q_s_a_prime_dim
+
+                    td_error_dim = q_s_a[dim] - expected_state_action_values_dim
+                    if dim == 0:
+                        td_error = torch.abs(td_error_dim)
+                    else:
+                        td_error += torch.abs(td_error_dim)
+
+                    loss_dim = F.smooth_l1_loss(q_s_a[dim],expected_state_action_values_dim)
+                    loss += loss_dim
+                loss /= self.num_branches
+            # clip the error and flip--old
+            #clipped_error = -1.0 * error.clamp(-1, 1)
 
         else:
-            # -----------------
-            #   regular DQN
-            # -----------------
-
-            # get the Q values for best actions in obs_tp1
-            # based off frozen Q network
-            # max(Q(s', a', theta_i_frozen)) wrt a'
-            q_tp1_values = self.Q_target(obs_tp1).detach()
-            q_tp1_values = self.divide(q_tp1_values, self.separate)
-            q_s_a_prime = []
-            a_prime = []
-            loss = 0
+            # input batches to networks
+            # get the Q values for current observations for each action dimension
+            q_values = self.Q(obs_t)
+            q_values = self.divide(q_values, self.separate)
+            #q_values = np.hsplit(q_values, self.separate)
+            q_s_a = []
             for dim in range(self.num_branches):
-                q_tp1_value = q_tp1_values[dim]
-                q_s_a_prime_dim, a_prime_dim = q_tp1_value.max(1)
+                selected_a = act_t[:,dim].view(act_t.size(0),-1)
+                q_value = q_values[dim]
+                q_s_a_dim = q_value.gather(1, selected_a)
+                q_s_a.append(q_s_a_dim)
+                #if dim == 0:
+                #    q_s_a = q_s_a_dim
+                #else:
+                #    q_s_a = torch.cat((q_s_a, q_s_a_dim),1)
 
-                q_s_a_prime_dim = (1 - done_mask) * q_s_a_prime_dim
-                q_s_a_prime.append(q_s_a_prime_dim)
-                a_prime.append(a_prime_dim)
+            # calculate target Q value:
+            if self.double_dqn:
+                # ---------------
+                #   double DQN
+                # ---------------
 
-                expected_state_action_values_dim = rew_t + self.gamma * q_s_a_prime_dim
-                loss_dim = F.smooth_l1_loss(q_s_a[dim],expected_state_action_values_dim)
-                loss += loss_dim
-            loss /= self.num_branches
-        # clip the error and flip--old
-        #clipped_error = -1.0 * error.clamp(-1, 1)
+                # get the Q values for best actions in obs_tp1
+                # based off the current Q network
+                # max(Q(s', a', theta_i)) wrt a'
+                q_tp1_values = self.Q(obs_tp1).detach()
+                q_tp1_values = self.divide(q_tp1_values, self.separate)
+                a_prime = []
+                for dim in range(self.num_branches):
+                    q_tp1_value = q_tp1_values[dim]
+                    _, a_prime_dim = q_tp1_value.max(1)
+                    a_prime.append(a_prime_dim)
+
+                # get Q values from frozen network for next state and chosen action
+                q_target_tp1_values = self.Q_target(obs_tp1).detach()
+                q_target_tp1_values = self.divide(q_target_tp1_values, self.separate)
+
+                expected_state_action_values = []
+                
+                for dim in range(self.num_branches):
+                    q_target_tp1_value = q_target_tp1_values[dim]
+                    q_target_s_a_prime_dim = q_target_tp1_value.gather(1,a_prime[dim].unsqueeze(1))
+                    q_target_s_a_prime_dim = q_target_s_a_prime_dim.squeeze()
+
+                    #if current state is end of episode, then there if no next Q value
+                    q_target_s_a_prime_dim = (1 - done_mask) * q_target_s_a_prime_dim
+
+                    # TODO ： mean td error
+                    expected_state_action_values_dim = (rew_t + self.gamma * q_target_s_a_prime_dim).view(self.batch_size, -1)
+                    #print("expected_state_action_values_dim size: ",expected_state_action_values_dim.size())
+                    expected_state_action_values.append(expected_state_action_values_dim)
+
+                # calculate loss
+                branch_losses = []
+                for dim in range(self.num_branches):
+                    td_error_dim = q_s_a[dim] - expected_state_action_values[dim]
+                    if dim == 0:
+                        td_error = torch.abs(td_error_dim)
+                    else:
+                        #td_error = torch.cat((td_error, torch.abs(td_error_dim)),1)
+                        td_error += td_error_dim
+                    #td_error /= self.num_brunches
+
+                    loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_state_action_values[dim])
+                    #print("loss_dim: ",loss_dim)
+                    branch_losses.append(loss_dim)
+                
+                loss = sum(branch_losses) / self.num_branches
+
+            else:
+                # -----------------
+                #   regular DQN
+                # -----------------
+
+                # get the Q values for best actions in obs_tp1
+                # based off frozen Q network
+                # max(Q(s', a', theta_i_frozen)) wrt a'
+                q_tp1_values = self.Q_target(obs_tp1).detach()
+                q_tp1_values = self.divide(q_tp1_values, self.separate)
+                q_s_a_prime = []
+                a_prime = []
+                loss = 0
+                for dim in range(self.num_branches):
+                    q_tp1_value = q_tp1_values[dim]
+                    q_s_a_prime_dim, a_prime_dim = q_tp1_value.max(1)
+
+                    q_s_a_prime_dim = (1 - done_mask) * q_s_a_prime_dim
+                    q_s_a_prime.append(q_s_a_prime_dim)
+                    a_prime.append(a_prime_dim)
+
+                    expected_state_action_values_dim = rew_t + self.gamma * q_s_a_prime_dim
+
+                    td_error_dim = q_s_a[dim] - expected_state_action_values_dim
+                    if dim == 0:
+                        td_error = torch.abs(td_error_dim)
+                    else:
+                        td_error += torch.abs(td_error_dim)
+
+                    loss_dim = F.smooth_l1_loss(q_s_a[dim],expected_state_action_values_dim)
+                    loss += loss_dim
+                loss /= self.num_branches
+            # clip the error and flip--old
+            #clipped_error = -1.0 * error.clamp(-1, 1)
 
         # backwards pass
         self.optimizer.zero_grad()
@@ -368,6 +524,14 @@ class Agent():
         # update
         self.optimizer.step()
         self.num_param_updates += 1
+
+        # update priorities:
+        if self.prioritized_replay:
+            new_priorities = (torch.abs(td_error.detach()) + self.prioritized_replay_eps).squeeze()
+            #print("new_priorities: ",new_priorities.size(),new_priorities)
+            new_priorities = to_np(new_priorities)
+            self.replay_buffer.update_priorities(idxes, new_priorities)
+            #print("updata_success!")
 
         # update target Q nerwork weights with current Q network weights
         if self.num_param_updates % self.target_update_freq == 0:

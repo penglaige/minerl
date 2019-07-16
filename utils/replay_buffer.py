@@ -16,7 +16,7 @@ def sample_n_unique(sampling_f, n):
     return res
 
 class ReplayBuffer():
-    def __init__(self, size, frame_history_len):
+    def __init__(self, size, frame_history_len, non_pixel_dimension, add_non_pixel=False):
         """This is a memory efficient implementation of the replay buffer.
         The sepecific memory optimizations use here are:
             - only store each frame once rather than k times
@@ -40,6 +40,8 @@ class ReplayBuffer():
         """
         self.size = size
         self.frame_history_len = frame_history_len
+        self.non_pixel_dimension = non_pixel_dimension
+        self.add_non_pixel = add_non_pixel
 
         self.next_idx      = 0
         self.num_in_buffer = 0
@@ -60,8 +62,12 @@ class ReplayBuffer():
         rew_batch      = self.reward[idxes]
         next_obs_batch = np.concatenate([self._encode_observation(idx + 1)[None] for idx in idxes], 0)
         done_mask      = np.array([1.0 if self.done[idx] else 0.0 for idx in idxes], dtype=np.float32)
-
-        return obs_batch, act_batch, rew_batch, next_obs_batch, done_mask
+        if self.add_non_pixel:
+            non_pixel_obs_batch = self.non_pixel_obs[idxes]
+            next_non_pixel_obs_batch = self.non_pixel_obs[[idx + 1 for idx in idxes]]
+            return obs_batch, act_batch, rew_batch, next_obs_batch, done_mask, non_pixel_obs_batch, next_non_pixel_obs_batch
+        else:
+            return obs_batch, act_batch, rew_batch, next_obs_batch, done_mask
 
     def sample(self, batch_size):
         """Sample `batch_size` different transitions.
@@ -136,7 +142,7 @@ class ReplayBuffer():
             img_h, img_w = self.obs.shape[2], self.obs.shape[3]
             return self.obs[start_idx:end_idx].reshape(-1, img_h, img_w)
 
-    def store_frame(self, frame):
+    def store_frame(self, frame, non_pixel_feature):
         """Store a single frame in the buffer at the next available index, overwriting
         old frames if necessary.
         Parameters
@@ -158,13 +164,18 @@ class ReplayBuffer():
             self.action   = np.empty([self.size],                     dtype=np.int32)
             self.reward   = np.empty([self.size],                     dtype=np.float32)
             self.done     = np.empty([self.size],                     dtype=np.bool)
+            if self.add_non_pixel:
+                self.non_pixel_obs = np.empty([self.size, self.non_pixel_dimension],  dtype=np.float32)
         self.obs[self.next_idx] = frame
+        if self.add_non_pixel:
+            self.non_pixel_obs[self.next_idx] = non_pixel_feature
 
         ret = self.next_idx
         self.next_idx = (self.next_idx + 1) % self.size
         self.num_in_buffer = min(self.size, self.num_in_buffer + 1)
 
         return ret
+    
 
     def store_effect(self, idx, action, reward, done):
         """Store effects of action taken after obeserving frame stored
@@ -187,7 +198,7 @@ class ReplayBuffer():
         self.done[idx]   = done
 
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, size, frame_history_len, alpha, num_branches):
+    def __init__(self, size, frame_history_len, alpha, num_branches,non_pixel_dimension,add_non_pixel=False):
         """This is a memory efficient implementation of the replay buffer.
         The sepecific memory optimizations use here are:
             - only store each frame once rather than k times
@@ -212,7 +223,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             how much prioritization is used
             (0 - no prioritization, 1 - full prioritization)
         """
-        super(PrioritizedReplayBuffer, self).__init__(size, frame_history_len)
+        super(PrioritizedReplayBuffer, self).__init__(size, frame_history_len,non_pixel_dimension,add_non_pixel)
         
         #self.next_idx       = 0
         #self.num_in_buffer  = 0
@@ -291,7 +302,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         encoded_sample = self._encode_sample(idxes)
         return tuple(list(encoded_sample) + [weights, idxes])
 
-    def store_frame(self, frame):
+    def store_frame(self, frame, non_pixel_feature):
         """Store a single frame in the buffer at the next available index, overwriting
         old frames if necessary.
         Parameters
@@ -313,7 +324,11 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self.action   = np.empty([self.size, self.num_branches],  dtype=np.int32)
             self.reward   = np.empty([self.size],                     dtype=np.float32)
             self.done     = np.empty([self.size],                     dtype=np.bool)
+            if self.add_non_pixel:
+                self.non_pixel_obs = np.empty([self.size, self.non_pixel_dimension],  dtype=np.float32)
         self.obs[self.next_idx] = frame
+        if self.add_non_pixel:
+            self.non_pixel_obs[self.next_idx] = non_pixel_feature
 
         ret = self.next_idx
         self.next_idx = (self.next_idx + 1) % self.size
