@@ -23,7 +23,6 @@ import socket
 
 # Global Variables
 BATCH_SIZE = 32
-REPLAY_BUFFER_SIZE = 1000000
 FRAME_HISTORY_LEN = 4
 TARGET_UPDATE_FREQ = 2000
 GAMMA = 0.99
@@ -31,8 +30,6 @@ LEARNING_FREQ = 4
 LEARNING_RATE = 0.00025
 ALPHA = 0.95
 EPS = 0.01
-EXPLORATION_SCHEDULE = LinearSchedule(5500000, 0.1)
-LEARNING_STARTS = 60000
 
 RESIZE_WIDTH  = 64
 RESIZE_HEIGHT = 64
@@ -65,6 +62,13 @@ double_dqn = True
 q_func = Branches_dueling_DQN2 if add_non_pixel == True else Branches_dueling_DQN
 # argparse
 train = True
+
+
+# parameters related to the eps number:
+REPLAY_BUFFER_SIZE = 1000000
+EXPLORATION_SCHEDULE = LinearSchedule(3000000, 0.1)
+LEARNING_STARTS = 60000
+prioritized_replay_beta_iters=5500000
 
 if not train:
     num_reps = 5
