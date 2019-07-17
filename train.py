@@ -5,7 +5,7 @@ import torch
 import torch.optim as optim
 import argparse
 
-from model import Branches_dueling_DQN
+from model import Branches_dueling_DQN, Branches_dueling_DQN2
 from learn import Agent, OptimizerSpec
 from utils.schedules import *
 
@@ -23,7 +23,7 @@ import socket
 
 # Global Variables
 BATCH_SIZE = 32
-REPLAY_BUFFER_SIZE = 800000
+REPLAY_BUFFER_SIZE = 1000000
 FRAME_HISTORY_LEN = 4
 TARGET_UPDATE_FREQ = 2000
 GAMMA = 0.99
@@ -31,7 +31,7 @@ LEARNING_FREQ = 4
 LEARNING_RATE = 0.00025
 ALPHA = 0.95
 EPS = 0.01
-EXPLORATION_SCHEDULE = LinearSchedule(1200000, 0.1)
+EXPLORATION_SCHEDULE = LinearSchedule(5500000, 0.1)
 LEARNING_STARTS = 60000
 
 RESIZE_WIDTH  = 64
@@ -48,7 +48,7 @@ action_space = []
 convs = [(32,7,3),(64,4,2),(64,3,1)]
 non_pixel_layer = [64]
 non_pixel_input_size = 2
-add_non_pixel = False
+add_non_pixel = True
 in_feature = 7*7*64
 hidden_actions = [128]
 hidden_value = [128]
@@ -57,10 +57,12 @@ aggregator="reduceLocalMean"
 prioritized_replay=True
 prioritized_replay_alpha=0.6
 prioritized_replay_beta0=0.4
-prioritized_replay_beta_iters=1600000
+prioritized_replay_beta_iters=5500000
 prioritized_replay_eps=0.0001
 dueling_dqn = True
 double_dqn = True
+
+q_func = Branches_dueling_DQN2 if add_non_pixel == True else Branches_dueling_DQN
 # argparse
 train = True
 
@@ -80,7 +82,8 @@ if not train:
     LEARNING_STARTS = 6000
     prioritized_replay_beta_iters=30000
 else:
-    num_reps = 300
+    # 6000 steps per ep
+    num_reps = 1000
 # logger
 logging.basicConfig(level=logging.INFO)
 
@@ -112,7 +115,7 @@ num_branches = len(action_space) + 1
 #--------------------------- Agent setting ------------------------------------------------------------
 agent = Agent(
         env=env,
-        q_func=Branches_dueling_DQN,
+        q_func=q_func,
         optimizer_spec=optimizer,
         action_space=action_space,
         convs = convs,

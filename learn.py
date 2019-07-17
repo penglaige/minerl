@@ -171,6 +171,7 @@ class Agent():
                                 self.hidden_value, self.num_branches, 
                                 self.num_actions_for_branch, self.aggregator).type(dtype)
         else:
+            # print("with non pixel feature")
             self.Q = self.q_func(self.non_pixel_input_size, self.non_pixel_layer,
                                 self.convs, self.in_channels, 
                                 self.in_feature, self.hidden_actions, 
@@ -187,7 +188,9 @@ class Agent():
 
         # create repaly buffer 
         if(prioritized_replay == True):
-            self.replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_size, self.frame_history_len, self.prioritized_replay_alpha, self.num_branches,self.non_pixel_input_size,self.add_non_pixel)
+            self.replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_size, self.frame_history_len, 
+                                                        self.prioritized_replay_alpha, self.num_branches,
+                                                        self.non_pixel_input_size,self.add_non_pixel)
             self.beta_schedule = LinearSchedule(prioritized_replay_beta_iters,
                                             initial_p=prioritized_replay_beta0,
                                             final_p=1.0)
@@ -202,8 +205,9 @@ class Agent():
         self.best_mean_episode_reward = -float('inf')
         self.last_obs = None
         
-        self.Log_Every_N_Steps = 60000
-        self.Save_Model_Every_N_Steps = 60000
+        self.Log_Every_N_Steps = 600000
+        self.Save_Model_Every_N_Steps = 600000
+        self.Save_Model_Every_N_EPs = 50
         self.Save_Reward_Every_N_EPs = 10
         
         ##########################
@@ -217,16 +221,21 @@ class Agent():
         for ep in range(1, self.num_episodes + 1):
             total_rewards = 0
             self.last_obs, _ = self.env.reset()
-            self.last_obs = self.last_obs["pov"]
+
             done = False
             while not done:
                 ### Step the agent and store the transition
                 # store last frame, returned idx used later
-                
-                last_stored_frame_idx = self.replay_buffer.store_frame(self.last_obs, None)
+                last_pov = self.last_obs["pov"]  # pixel feature
+                last_compass = self.last_obs["compassAngle"] # non_pixel_feature
+                last_dirt = self.last_obs["inventory"]["dirt"]  # non_pixel_feature
+                last_non_pixel_feature = np.array([last_compass / 180.0, last_dirt / 64.0]).reshape(1,2)
+                last_stored_frame_idx = self.replay_buffer.store_frame(last_pov, last_non_pixel_feature)
 
                 # get observations to input to Q netword
                 observations = self.replay_buffer.encode_recent_observation()
+                if self.add_non_pixel:
+                    non_pixel_feature = self.replay_buffer.encode_recent_non_pixel_feature()
 
                 if self.t < self.learning_starts:
                     act = self.get_random_action()
@@ -237,8 +246,12 @@ class Agent():
                     threshold = self.exploration.value(self.t)
                     if sample > threshold:
                         obs = torch.from_numpy(observations).unsqueeze(0).type(dtype) / 255.0
+                        non_pixel_feature = torch.from_numpy(non_pixel_feature).type(dtype)
                         with torch.no_grad():
-                            action = self.Q(obs)
+                            if self.add_non_pixel:
+                                action = self.Q(obs,non_pixel_feature)
+                            else:
+                                action = self.Q(obs)
                             
                             action = self.divide(action, self.separate)
 
@@ -273,18 +286,26 @@ class Agent():
                     self.log(ep, ep_rewards)
                 
                 # uodate last obs
-                self.last_obs = obs["pov"]
+                self.last_obs = obs
 
                 # Perform experience replay and train the network
                 # if the replay buffer contains enough samples
                 if (self.t >= self.learning_starts and self.t % self.learning_freq == 0 and self.replay_buffer.can_sample(self.batch_size)):
                     self.train()
 
-                if self.t % self.Save_Model_Every_N_Steps == 0:
-                    if not os.path.exists("models"):
-                        os.makedirs("models")
-                    model_save_path = f"models/{self.t}.model" 
-                    torch.save(self.Q.state_dict(), model_save_path)
+                # Save model
+                if self.Save_Model_Every_N_EPs > 0:
+                    if ep % self.Save_Model_Every_N_EPs == 0:
+                        if not os.path.exists("models"):
+                            os.makedirs("models")
+                        model_save_path = f"models/ep{self.t}.model" 
+                        torch.save(self.Q.state_dict(), model_save_path)
+                else:
+                    if self.t % self.Save_Model_Every_N_Steps == 0:
+                        if not os.path.exists("models"):
+                            os.makedirs("models")
+                        model_save_path = f"models/t{self.t}.model" 
+                        torch.save(self.Q.state_dict(), model_save_path)
 
 
 

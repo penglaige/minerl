@@ -50,6 +50,7 @@ class ReplayBuffer():
         self.action = None
         self.reward = None
         self.done   = None
+        self.non_pixel_obs = None
 
     def can_sample(self, batch_size):
         '''Returns true if `batch_size` different transitions can be sampled from the buffer.'''
@@ -101,6 +102,17 @@ class ReplayBuffer():
         assert self.can_sample(batch_size)
         idxes = sample_n_unique(lambda: random.randint(0, self.num_in_buffer - 2), batch_size)
         return self._encode_sample(idxes)
+
+    def encode_recent_non_pixel_feature(self):
+        """Return the most recent non_pixel_feature.
+        Returns
+        -------
+        non_pixel_feature: np.array
+            Array of shape (1, non_pixel_dimension)
+            and dtype np.uint8, 
+        """
+        assert self.num_in_buffer > 0
+        return self.non_pixel_obs[(self.next_idx - 1) % self.size].reshape(1,self.non_pixel_dimension)
 
     def encode_recent_observation(self):
         """Return the most recent `frame_history_len` frames.

@@ -253,7 +253,7 @@ class Branches_dueling_DQN2(nn.Module):
         q_function for DQN algorithm.
     """
     def __init__(self, non_pixel_input, non_pixel_layer,convs, in_channels, in_feature, hidden_actions, hidden_value, num_branches, num_actions_for_branch,aggregator="reduceLocalMean"):
-        super(Branches_dueling_DQN, self).__init__()
+        super(Branches_dueling_DQN2, self).__init__()
 
         self.num_branches = num_branches
         self.num_actions_for_branch = num_actions_for_branch
@@ -308,6 +308,7 @@ class Branches_dueling_DQN2(nn.Module):
         setattr(self, "fc" + str(fc_l), nn.Linear(in_features=hidden_value[-1],out_features=1))
         self.value_idxes.append(fc_l)
 
+        # non pixel feature net
         fc_l += 1
         for i in range(len(non_pixel_layer)):
             out_features = non_pixel_layer[i]
@@ -316,8 +317,8 @@ class Branches_dueling_DQN2(nn.Module):
             else:
                 in_features = non_pixel_layer[i - 1]
             setattr(self, "fc" + str(fc_l), nn.Linear(in_features=in_features,out_features=out_features))
-        self.non_pixel_idxes.append(fc_l)
-        fc_l += 1
+            self.non_pixel_idxes.append(fc_l)
+            fc_l += 1
 
         self.relu = nn.ReLU()
         
