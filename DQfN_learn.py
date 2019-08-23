@@ -2,7 +2,7 @@
 https://github.com/berkeleydeeprlcourse/homework/tree/master/hw3
 # todo
 """
-
+import minerl
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
@@ -30,12 +30,13 @@ def to_np(x):
     return x.data.cpu().numpy()
 
 # learner
-class Agent():
+class DQfDAgent():
     """
     A branch_duling_dqn learner agent.
     """
 
     def __init__(self,env,q_func,optimizer_spec,
+        task,
         action_space,
         convs = [(32,7,3),(64,4,2),(64,3,1)],
         non_pixel_layer=[64],
@@ -50,12 +51,15 @@ class Agent():
         exploration=LinearSchedule(200000, 0.1),
         stopping_criterion=None,
         num_episodes=1000,
+        #TODO
+        pre_train_steps=100000,
         replay_buffer_size=1000000,
         prioritized_replay=True,
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_beta_iters=1600000,
         prioritized_replay_eps=0.00001,
+        prioritized_demo_replay_eps= 1.0,
         batch_size=32,gamma=0.99,
         learning_starts=50000,
         learning_freq=4,
@@ -124,6 +128,7 @@ class Agent():
         self.logger = Logger('./logs')
         self.env = env
         self.q_func = q_func
+        self.task = task
         self.convs = convs
         self.non_pixel_layer = non_pixel_layer
         self.non_pixel_input_size = non_pixel_input_size
@@ -138,6 +143,7 @@ class Agent():
         self.optimizer_spec = optimizer_spec
         self.exploration = exploration
         self.num_episodes = num_episodes
+        self.pre_train_steps = pre_train_steps
         self.stopping_criterion = stopping_criterion
         self.replay_buffer_size = replay_buffer_size
         self.prioritized_replay = prioritized_replay
@@ -145,6 +151,7 @@ class Agent():
         self.prioritized_replay_beta0 = prioritized_replay_beta0
         self.prioritized_replay_beta_iters = prioritized_replay_beta_iters
         self.prioritized_replay_eps = prioritized_replay_eps
+        self.prioritized_demo_replay_eps = prioritized_demo_replay_eps
         self.batch_size = batch_size
         self.gamma = gamma
         self.learning_starts = learning_starts
@@ -188,7 +195,7 @@ class Agent():
 
         # create repaly buffer 
         if(prioritized_replay == True):
-            self.replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_size, self.frame_history_len, 
+            self.replay_buffer = demoReplayBuffer(self.replay_buffer_size, self.frame_history_len, 
                                                         self.prioritized_replay_alpha, self.num_branches,
                                                         self.non_pixel_input_size,self.add_non_pixel)
             self.beta_schedule = LinearSchedule(prioritized_replay_beta_iters,
@@ -197,6 +204,7 @@ class Agent():
         else:
             self.replay_buffer = ReplayBuffer(self.replay_buffer_size, self.frame_history_len,self.non_pixel_input_size, self.add_non_pixel)
             self.beta_schedule = None
+        self.demo_size = self.store_demo_data()
 
         ###### RUN SETTING ####
         self.t = 0
@@ -292,7 +300,9 @@ class Agent():
                 # Perform experience replay and train the network
                 # if the replay buffer contains enough samples
                 if (self.t >= self.learning_starts and self.t % self.learning_freq == 0 and self.replay_buffer.can_sample(self.batch_size)):
-                    self.train()
+                    td_error = self.train()
+                    if self.prioritized_replay:
+                        self.update_priorities(td_error, self.prioritized_replay_eps)
 
                 # Save model
                 if self.Save_Model_Every_N_EPs > 0:
@@ -308,10 +318,7 @@ class Agent():
                         model_save_path = f"models/t{self.t}.model" 
                         torch.save(self.Q.state_dict(), model_save_path)
 
-
-
-
-    def train(self):
+    def train(self, pre_train=False):
         # Sample transition batch from replay memory
         # done_mash = 1 if next state is end of episode
         if self.add_non_pixel:
@@ -535,6 +542,10 @@ class Agent():
 
         # backwards pass
         self.optimizer.zero_grad()
+        # if pre-train
+        # TODO
+        #if pre_train:
+        #    dqloss = loss
 
         # TODO?
         #print("loss: ",loss)
@@ -547,18 +558,19 @@ class Agent():
         self.optimizer.step()
         self.num_param_updates += 1
 
-        # update priorities:
-        if self.prioritized_replay:
-            new_priorities = (torch.abs(td_error.detach()) + self.prioritized_replay_eps).squeeze()
-            #print("new_priorities: ",new_priorities.size(),new_priorities)
-            new_priorities = to_np(new_priorities)
-            self.replay_buffer.update_priorities(idxes, new_priorities)
-            #print("updata_success!")
-
         # update target Q nerwork weights with current Q network weights
         if self.num_param_updates % self.target_update_freq == 0:
             self.Q_target.load_state_dict(self.Q.state_dict())
                 
+        return td_error
+    
+    def update_priorities(self, td_error, epsilon):
+        if self.prioritized_replay:
+            new_priorities = (torch.abs(td_error.detach()) + epsilon).squeeze()
+            #print("new_priorities: ",new_priorities.size(),new_priorities)
+            new_priorities = to_np(new_priorities)
+            self.replay_buffer.update_priorities(idxes, new_priorities)
+            #print("updata_success!")
         return 
 
 
@@ -629,6 +641,10 @@ class Agent():
         return act
 
     def get_action(self, act):
+        """
+        get action format to give to the env according to the act list []
+        self.action_space [order of actions, camera at last]
+        """
         action = self.env.action_space.noop()
 
         for idx in range(len(self.action_space)):
@@ -656,3 +672,62 @@ class Agent():
         cur = x[:,separate_list[i]:]
         x_sep.append(cur)
         return x_sep
+
+    def store_demo_data(self):
+        """
+        Store demo data into the replay buffer.
+        """
+        pwd = os.getcwd()
+        data_path = pwd + '/human_data'
+
+        data = minerl.data.make(self.task, data_dir=data_path)
+        data_dir = data_path + '/' + self.task
+        streams = os.listdir(data_dir)
+
+        total_frames = 0
+        for stream in streams:
+            demo = data.load_data(stream, include_metadata=False)
+            try:
+                for current_state, action, reward, next_state, done, metadata in demo:
+                    if metadata['success'] == False:
+                        break
+                    total_frames += 1
+                    frame = current_state['pov']
+                    compass = current_state['compassAngle']
+                    dirt = current_state['inventory']['dirt']
+                    non_pixel_feature = np.array([compass / 180.0, dirt / 64/0]).reshape(1, 2)
+                    idx = self.replay_buffer.store_frame(frame, non_pixel_feature)
+
+                    act = []
+                    for a in self.action_space:
+                        if a == 'camera':
+                            act.append(action[a][0])
+                            act.append(action[a][1])
+                        else:
+                            act.append(action[a])
+
+                    reward = np.clip(reward, -1.0, 1.0)
+                    done_int = 1 if done else 0
+                    self.replay_buffer.store_effect(idx, np.array(act), reward, done_int)
+            except:
+                print(f"stream {stream} is corrupted!")
+                continue
+
+        assert total_frames == self.replay_buffer.num_in_buffer
+        print(f"total frames {total_frames}")
+        return total_frames
+
+    def pre_train(self):
+        """
+        Pretrain phase.
+        """
+        print('Pre-training ...')
+        for t in range(self.pre_train_steps):
+            td_error = self.train(pre_train=True)
+            # update priorities
+            self.update_priorities(td_error, self.prioritized_replay_eps)
+        print("All pre-train finish.")
+
+        return
+
+
