@@ -367,4 +367,41 @@ class demoReplayBuffer(PrioritizedReplayBuffer):
     def __init__(self, size, frame_history_len, alpha, num_branches,non_pixel_dimension,add_non_pixel=False):
         super(demoReplayBuffer, self).__init__(size, frame_history_len, alpha, num_branches,non_pixel_dimension,add_non_pixel)
 
-        self.demo_size = None
+        self.demo_size = 0
+
+    def store_frame(self, frame, non_pixel_feature):
+        """Store a single frame in the buffer at the next available index, overwriting
+        old frames if necessary.
+        Parameters
+        ----------
+        frame: np.array
+            Array of shape (img_h, img_w, img_c) and dtype np.uint8
+            the frame to be stored
+        Returns
+        -------
+        idx: int
+            Index at which the frame is stored. To be used for `store_effect` later.
+        """
+        # if observation is an image...
+        if len(frame.shape) > 1:
+            frame = frame.transpose(2, 0, 1)
+
+        if self.obs is None:
+            self.obs      = np.empty([self.size] + list(frame.shape), dtype=np.uint8)
+            self.action   = np.empty([self.size, self.num_branches],  dtype=np.int32)
+            self.reward   = np.empty([self.size],                     dtype=np.float32)
+            self.done     = np.empty([self.size],                     dtype=np.bool)
+            if self.add_non_pixel:
+                self.non_pixel_obs = np.empty([self.size, self.non_pixel_dimension],  dtype=np.float32)
+        self.obs[self.next_idx] = frame
+        if self.add_non_pixel:
+            self.non_pixel_obs[self.next_idx] = non_pixel_feature
+
+        ret = self.next_idx
+        if self.next_idx >= self.size:
+            self.next_idx = (self.next_idx + 1) % self.size + self.demo_size
+        else:
+            self.next_idx += 1
+        self.num_in_buffer = min(self.size, self.num_in_buffer + 1)
+
+        return ret

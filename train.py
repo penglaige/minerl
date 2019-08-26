@@ -44,7 +44,7 @@ optimizer = OptimizerSpec(
 # models parameter
 demo = True
 task = 'MineRLNavigateDense-v0'
-PRE_TRAIN_STEPS = 10000
+PRE_TRAIN_STEPS = 100000
 action_space = []
 convs = [(32,7,3),(64,4,2),(64,3,1)]
 non_pixel_layer = [64]
@@ -66,7 +66,10 @@ double_dqn = True
 
 q_func = Branches_dueling_DQN2 if add_non_pixel == True else Branches_dueling_DQN
 # argparse
-train = True
+train = False
+if (len(sys.argv) > 1 and sys.argv[1] =='train' ):
+    train = True
+
 
 
 # parameters related to the eps number:
@@ -76,6 +79,7 @@ LEARNING_STARTS = 60000
 prioritized_replay_beta_iters=5500000
 
 if not train:
+    PRE_TRAIN_STEPS = 1000
     num_reps = 5
     # Global Variables
     BATCH_SIZE = 32
@@ -198,6 +202,7 @@ else:
             dueling_dqn=dueling_dqn
     )
     agent.pre_train()
+    agent.run()
 #--------------------------- Begin Minecraft game -----------------------------------------------------
 print("-----------------------Training ends-----------------------")
 

@@ -18,6 +18,7 @@ from utils.schedules import *
 from logger import Logger
 import time
 import pickle
+from tqdm import tqdm
 
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs"])
 
@@ -205,6 +206,7 @@ class DQfDAgent():
             self.replay_buffer = ReplayBuffer(self.replay_buffer_size, self.frame_history_len,self.non_pixel_input_size, self.add_non_pixel)
             self.beta_schedule = None
         self.demo_size = self.store_demo_data()
+        self.replay_buffer.demo_size = self.demo_size
 
         ###### RUN SETTING ####
         self.t = 0
@@ -228,7 +230,7 @@ class DQfDAgent():
         ep_rewards = []
         for ep in range(1, self.num_episodes + 1):
             total_rewards = 0
-            self.last_obs, _ = self.env.reset()
+            self.last_obs = self.env.reset()
 
             done = False
             while not done:
@@ -299,10 +301,10 @@ class DQfDAgent():
 
                 # Perform experience replay and train the network
                 # if the replay buffer contains enough samples
-                if (self.t >= self.learning_starts and self.t % self.learning_freq == 0 and self.replay_buffer.can_sample(self.batch_size)):
-                    td_error = self.train()
+                if (self.t >= self.learning_starts + self.demo_size and self.t % self.learning_freq == 0 and self.replay_buffer.can_sample(self.batch_size)):
+                    td_error, idxes = self.train()
                     if self.prioritized_replay:
-                        self.update_priorities(td_error, self.prioritized_replay_eps)
+                        self.update_priorities(td_error, self.prioritized_replay_eps,idxes)
 
                 # Save model
                 if self.Save_Model_Every_N_EPs > 0:
@@ -562,9 +564,9 @@ class DQfDAgent():
         if self.num_param_updates % self.target_update_freq == 0:
             self.Q_target.load_state_dict(self.Q.state_dict())
                 
-        return td_error
+        return td_error, idxes
     
-    def update_priorities(self, td_error, epsilon):
+    def update_priorities(self, td_error, epsilon,idxes):
         if self.prioritized_replay:
             new_priorities = (torch.abs(td_error.detach()) + epsilon).squeeze()
             #print("new_priorities: ",new_priorities.size(),new_priorities)
@@ -673,6 +675,14 @@ class DQfDAgent():
         x_sep.append(cur)
         return x_sep
 
+    def camera_transform(self,x):
+        x = x + 180
+        if (x >= 350):
+            y = int(x / 10)
+        else:
+            y = round(x / 10)
+        return y
+
     def store_demo_data(self):
         """
         Store demo data into the replay buffer.
@@ -686,7 +696,9 @@ class DQfDAgent():
 
         total_frames = 0
         for stream in streams:
-            demo = data.load_data(stream, include_metadata=False)
+            #if(self.replay_buffer.num_in_buffer >= 1000):
+                #break
+            demo = data.load_data(stream, include_metadata=True)
             try:
                 for current_state, action, reward, next_state, done, metadata in demo:
                     if metadata['success'] == False:
@@ -695,21 +707,21 @@ class DQfDAgent():
                     frame = current_state['pov']
                     compass = current_state['compassAngle']
                     dirt = current_state['inventory']['dirt']
-                    non_pixel_feature = np.array([compass / 180.0, dirt / 64/0]).reshape(1, 2)
+                    non_pixel_feature = np.array([compass / 180.0, dirt / 64.0]).reshape(1, 2)
                     idx = self.replay_buffer.store_frame(frame, non_pixel_feature)
 
                     act = []
                     for a in self.action_space:
                         if a == 'camera':
-                            act.append(action[a][0])
-                            act.append(action[a][1])
+                            act.append(self.camera_transform(action[a][0]))
+                            act.append(self.camera_transform(action[a][1]))
                         else:
                             act.append(action[a])
 
                     reward = np.clip(reward, -1.0, 1.0)
                     done_int = 1 if done else 0
                     self.replay_buffer.store_effect(idx, np.array(act), reward, done_int)
-            except:
+            except RuntimeError:
                 print(f"stream {stream} is corrupted!")
                 continue
 
@@ -722,10 +734,10 @@ class DQfDAgent():
         Pretrain phase.
         """
         print('Pre-training ...')
-        for t in range(self.pre_train_steps):
-            td_error = self.train(pre_train=True)
+        for t in tqdm(range(self.pre_train_steps)):
+            td_error, idxes = self.train(pre_train=True)
             # update priorities
-            self.update_priorities(td_error, self.prioritized_replay_eps)
+            self.update_priorities(td_error, self.prioritized_replay_eps, idxes)
         print("All pre-train finish.")
 
         return
