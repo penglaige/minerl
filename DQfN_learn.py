@@ -301,7 +301,7 @@ class DQfDAgent():
 
                 # Perform experience replay and train the network
                 # if the replay buffer contains enough samples
-                if (self.t >= self.learning_starts + self.demo_size and self.t % self.learning_freq == 0 and self.replay_buffer.can_sample(self.batch_size)):
+                if (self.t >= self.learning_starts and self.t % self.learning_freq == 0 and self.replay_buffer.can_sample(self.batch_size)):
                     td_error, idxes = self.train()
                     if self.prioritized_replay:
                         self.update_priorities(td_error, self.prioritized_replay_eps,idxes)

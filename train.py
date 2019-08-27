@@ -74,7 +74,7 @@ if (len(sys.argv) > 1 and sys.argv[1] =='train' ):
 
 # parameters related to the eps number:
 REPLAY_BUFFER_SIZE = 1000000
-EXPLORATION_SCHEDULE = LinearSchedule(3000000, 0.1)
+EXPLORATION_SCHEDULE = LinearSchedule(1000000, 0.1)
 LEARNING_STARTS = 60000
 prioritized_replay_beta_iters=5500000
 

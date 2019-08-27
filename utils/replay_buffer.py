@@ -398,7 +398,7 @@ class demoReplayBuffer(PrioritizedReplayBuffer):
             self.non_pixel_obs[self.next_idx] = non_pixel_feature
 
         ret = self.next_idx
-        if self.next_idx >= self.size:
+        if self.next_idx >= self.size - 1:
             self.next_idx = (self.next_idx + 1) % self.size + self.demo_size
         else:
             self.next_idx += 1
