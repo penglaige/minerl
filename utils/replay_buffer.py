@@ -405,3 +405,34 @@ class demoReplayBuffer(PrioritizedReplayBuffer):
         self.num_in_buffer = min(self.size, self.num_in_buffer + 1)
 
         return ret
+
+    def n_step_sample(self,trajectory_n,idxes,gamma):
+        # [batch, n, observation]
+        n_reward_batch = []
+        end_idxes = []
+        for idx in idxes:
+            r, end_idx = self._encode_n_step(trajectory_n, idx, gamma)
+            n_reward_batch.append(r)
+            end_idxes.append(end_idx)
+    
+        n_obs_batch = np.concatenate([self._encode_observation(idx + 1)[None] for idx in end_idxes], 0)
+        n_reward_batch = np.array(n_reward_batch,dtype=np.float32)
+        n_non_pixel_obs_batch = self.non_pixel_obs[[idx + 1 for idx in end_idxes]]
+        n_done_mask = np.array([1.0 if self.done[idx] else 0.0 for idx in end_idxes], dtype=np.float32)
+        return n_obs_batch, n_reward_batch, n_non_pixel_obs_batch, n_done_mask
+        
+    def _encode_n_step(self,trajectory_n, idx,gamma):
+        start_idx = idx
+        end_idx = start_idx
+        for i in range(trajectory_n):
+            end_idx += 1
+            if self.done[end_idx % self.size]:
+                break
+    
+        R = 0
+        for t in range(end_idx-1,start_idx-1,-1):
+            R = self.reward[t] + gamma * R
+        return R, end_idx
+
+
+        

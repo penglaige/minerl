@@ -31,20 +31,22 @@ LEARNING_FREQ = 4
 LEARNING_RATE = 0.00025
 ALPHA = 0.95
 EPS = 0.01
-
+LAMBDA = [1.0, 0.0, 1.0, 10e-5]  # for [loss_dq, loss_n_dq, loss_jeq, loss_l2]
 RESIZE_WIDTH  = 64
 RESIZE_HEIGHT = 64
 CUDA_VISIBLE_DEVICES = 0
 
 optimizer = OptimizerSpec(
     constructor=optim.RMSprop,
-    kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS)
+    kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS,weight_decay=LAMBDA[3])
 )
 
 # models parameter
 demo = True
 task = 'MineRLNavigateDense-v0'
 PRE_TRAIN_STEPS = 100000
+trajectory_n = 10
+iteration = 3
 action_space = []
 convs = [(32,7,3),(64,4,2),(64,3,1)]
 non_pixel_layer = [64]
@@ -83,7 +85,7 @@ if not train:
     num_reps = 5
     # Global Variables
     BATCH_SIZE = 32
-    REPLAY_BUFFER_SIZE = 50000
+    REPLAY_BUFFER_SIZE = 200000
     FRAME_HISTORY_LEN = 4
     TARGET_UPDATE_FREQ = 1000
     GAMMA = 0.99
@@ -170,6 +172,7 @@ else:
             optimizer_spec=optimizer,
             task=task,
             action_space=action_space,
+            Lambda=LAMBDA,
             convs = convs,
             non_pixel_layer=non_pixel_layer,
             non_pixel_input_size=non_pixel_input_size,
@@ -192,6 +195,7 @@ else:
             prioritized_demo_replay_eps=prioritized_demo_replay_eps,
             batch_size=BATCH_SIZE,gamma=GAMMA,
             learning_starts=LEARNING_STARTS,
+            trajectory_n=trajectory_n,
             learning_freq=LEARNING_FREQ,
             frame_history_len=FRAME_HISTORY_LEN,
             img_h=RESIZE_HEIGHT,
@@ -202,7 +206,7 @@ else:
             dueling_dqn=dueling_dqn
     )
     agent.pre_train()
-    agent.run()
+    #agent.run()
 #--------------------------- Begin Minecraft game -----------------------------------------------------
 print("-----------------------Training ends-----------------------")
 

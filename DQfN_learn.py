@@ -39,6 +39,7 @@ class DQfDAgent():
     def __init__(self,env,q_func,optimizer_spec,
         task,
         action_space,
+        Lambda,
         convs = [(32,7,3),(64,4,2),(64,3,1)],
         non_pixel_layer=[64],
         non_pixel_input_size = 2,
@@ -63,6 +64,7 @@ class DQfDAgent():
         prioritized_demo_replay_eps= 1.0,
         batch_size=32,gamma=0.99,
         learning_starts=50000,
+        trajectory_n=10,
         learning_freq=4,
         frame_history_len=4,
         img_h=64,
@@ -130,6 +132,8 @@ class DQfDAgent():
         self.env = env
         self.q_func = q_func
         self.task = task
+        self.Lambda = Lambda
+        self.trajectory_n = trajectory_n
         self.convs = convs
         self.non_pixel_layer = non_pixel_layer
         self.non_pixel_input_size = non_pixel_input_size
@@ -335,6 +339,12 @@ class DQfDAgent():
         obs_tp1 = Variable(torch.from_numpy(obs_tp1)).type(dtype) / 255.0
         done_mask = Variable(torch.from_numpy(done_mask)).type(dtype)
 
+        obs_tpn, rew_n, non_pixel_obs_tpn,n_done_mask = self.replay_buffer.n_step_sample(self.trajectory_n, idxes, self.gamma)
+        obs_tpn = Variable(torch.from_numpy(obs_tpn)).type(dtype) / 255.0
+        rew_n = Variable(torch.from_numpy(rew_n)).type(dtype)
+        non_pixel_obs_tpn = Variable(torch.from_numpy(non_pixel_obs_tpn)).type(dtype)
+        n_done_mask = Variable(torch.from_numpy(n_done_mask)).type(dtype)
+
         if self.add_non_pixel:
             # input batches to networks
             # get the Q values for current observations for each action dimension
@@ -437,117 +447,53 @@ class DQfDAgent():
             # clip the error and flip--old
             #clipped_error = -1.0 * error.clamp(-1, 1)
 
-        else:
-            # input batches to networks
-            # get the Q values for current observations for each action dimension
-            q_values = self.Q(obs_t)
-            q_values = self.divide(q_values, self.separate)
-            #q_values = np.hsplit(q_values, self.separate)
-            q_s_a = []
-            for dim in range(self.num_branches):
-                selected_a = act_t[:,dim].view(act_t.size(0),-1)
-                q_value = q_values[dim]
-                q_s_a_dim = q_value.gather(1, selected_a)
-                q_s_a.append(q_s_a_dim)
-                #if dim == 0:
-                #    q_s_a = q_s_a_dim
-                #else:
-                #    q_s_a = torch.cat((q_s_a, q_s_a_dim),1)
-
-            # calculate target Q value:
-            if self.double_dqn:
-                # ---------------
-                #   double DQN
-                # ---------------
-
-                # get the Q values for best actions in obs_tp1
-                # based off the current Q network
-                # max(Q(s', a', theta_i)) wrt a'
-                q_tp1_values = self.Q(obs_tp1).detach()
-                q_tp1_values = self.divide(q_tp1_values, self.separate)
-                a_prime = []
-                for dim in range(self.num_branches):
-                    q_tp1_value = q_tp1_values[dim]
-                    _, a_prime_dim = q_tp1_value.max(1)
-                    a_prime.append(a_prime_dim)
-
-                # get Q values from frozen network for next state and chosen action
-                q_target_tp1_values = self.Q_target(obs_tp1).detach()
-                q_target_tp1_values = self.divide(q_target_tp1_values, self.separate)
-
-                expected_state_action_values = []
-                
-                for dim in range(self.num_branches):
-                    q_target_tp1_value = q_target_tp1_values[dim]
-                    q_target_s_a_prime_dim = q_target_tp1_value.gather(1,a_prime[dim].unsqueeze(1))
-                    q_target_s_a_prime_dim = q_target_s_a_prime_dim.squeeze()
-
-                    #if current state is end of episode, then there if no next Q value
-                    q_target_s_a_prime_dim = (1 - done_mask) * q_target_s_a_prime_dim
-
-                    # TODO ： mean td error
-                    expected_state_action_values_dim = (rew_t + self.gamma * q_target_s_a_prime_dim).view(self.batch_size, -1)
-                    #print("expected_state_action_values_dim size: ",expected_state_action_values_dim.size())
-                    expected_state_action_values.append(expected_state_action_values_dim)
-
-                # calculate loss
-                branch_losses = []
-                for dim in range(self.num_branches):
-                    td_error_dim = q_s_a[dim] - expected_state_action_values[dim]
-                    if dim == 0:
-                        td_error = torch.abs(td_error_dim)
-                    else:
-                        #td_error = torch.cat((td_error, torch.abs(td_error_dim)),1)
-                        td_error += td_error_dim
-                    #td_error /= self.num_brunches
-
-                    loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_state_action_values[dim])
-                    #print("loss_dim: ",loss_dim)
-                    branch_losses.append(loss_dim)
-                
-                loss = sum(branch_losses) / self.num_branches
-
-            else:
-                # -----------------
-                #   regular DQN
-                # -----------------
-
-                # get the Q values for best actions in obs_tp1
-                # based off frozen Q network
-                # max(Q(s', a', theta_i_frozen)) wrt a'
-                q_tp1_values = self.Q_target(obs_tp1).detach()
-                q_tp1_values = self.divide(q_tp1_values, self.separate)
-                q_s_a_prime = []
-                a_prime = []
-                loss = 0
-                for dim in range(self.num_branches):
-                    q_tp1_value = q_tp1_values[dim]
-                    q_s_a_prime_dim, a_prime_dim = q_tp1_value.max(1)
-
-                    q_s_a_prime_dim = (1 - done_mask) * q_s_a_prime_dim
-                    q_s_a_prime.append(q_s_a_prime_dim)
-                    a_prime.append(a_prime_dim)
-
-                    expected_state_action_values_dim = rew_t + self.gamma * q_s_a_prime_dim
-
-                    td_error_dim = q_s_a[dim] - expected_state_action_values_dim
-                    if dim == 0:
-                        td_error = torch.abs(td_error_dim)
-                    else:
-                        td_error += torch.abs(td_error_dim)
-
-                    loss_dim = F.smooth_l1_loss(q_s_a[dim],expected_state_action_values_dim)
-                    loss += loss_dim
-                loss /= self.num_branches
-            # clip the error and flip--old
-            #clipped_error = -1.0 * error.clamp(-1, 1)
 
         # backwards pass
         self.optimizer.zero_grad()
         # if pre-train
         # TODO
-        #if pre_train:
-        #    dqloss = loss
+        if pre_train:
+            
+            dqloss = loss
+            # supervised_learning margin loss
+            slm_loss = 0
+            # n-step loss
+            q_tpn_values = self.Q(obs_tpn,non_pixel_obs_tpn).detach()
+            q_tpn_values = self.divide(q_tpn_values, self.separate)
+            an_prime = []
+            for dim in range(self.num_branches):
+                q_tpn_value = q_tpn_values[dim]
+                _, an_prime_dim = q_tpn_value.max(1)
+                an_prime.append(an_prime_dim)
+
+            q_target_tpn_values = self.Q_target(obs_tpn, non_pixel_obs_tpn).detach()
+            q_target_tpn_values = self.divide(q_target_tpn_values, self.separate)
+
+            expected_n_state_action_values = []
+
+            for dim in range(self.num_branches):
+                q_target_tpn_value = q_target_tpn_values[dim]
+                q_target_s_a_n_prime_dim = q_target_tpn_value.gather(1, an_prime[dim].unsqueeze(1))
+                q_target_s_a_n_prime_dim = q_target_s_a_n_prime_dim.squeeze()
+
+                q_target_s_a_n_prime_dim = (1 - n_done_mask) * q_target_s_a_n_prime_dim
+                expected_n_state_action_values_dim = (rew_n + self.gamma ** self.trajectory_n * q_target_s_a_n_prime_dim).view(self.batch_size, -1)
+                expected_n_state_action_values.append(expected_n_state_action_values_dim)
+
+            n_branch_losses = []
+            for dim in range(self.num_branches):
+                n_td_error_dim = q_s_a[dim] - expected_n_state_action_values[dim]
+                if dim == 0:
+                    n_td_error = torch.abs(n_td_error_dim)
+                else:
+                    n_td_error += torch.abs(n_td_error_dim)
+                n_loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_n_state_action_values[dim])
+
+                n_branch_losses.append(n_loss_dim)
+
+            n_step_loss = sum(n_branch_losses) / self.num_branches
+
+            loss = self.Lambda[0] * dqloss + self.Lambda[1] * slm_loss + self.Lambda[2] * n_step_loss
 
         # TODO?
         #print("loss: ",loss)
