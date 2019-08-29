@@ -315,7 +315,7 @@ class DQfDAgent():
                     if ep % self.Save_Model_Every_N_EPs == 0:
                         if not os.path.exists("models"):
                             os.makedirs("models")
-                        model_save_path = f"models/ep{self.t}.model" 
+                        model_save_path = f"models/ep{ep}.model" 
                         torch.save(self.Q.state_dict(), model_save_path)
                 else:
                     if self.t % self.Save_Model_Every_N_Steps == 0:
