@@ -339,12 +339,6 @@ class DQfDAgent():
         obs_tp1 = Variable(torch.from_numpy(obs_tp1)).type(dtype) / 255.0
         done_mask = Variable(torch.from_numpy(done_mask)).type(dtype)
 
-        obs_tpn, rew_n, non_pixel_obs_tpn,n_done_mask = self.replay_buffer.n_step_sample(self.trajectory_n, idxes, self.gamma)
-        obs_tpn = Variable(torch.from_numpy(obs_tpn)).type(dtype) / 255.0
-        rew_n = Variable(torch.from_numpy(rew_n)).type(dtype)
-        non_pixel_obs_tpn = Variable(torch.from_numpy(non_pixel_obs_tpn)).type(dtype)
-        n_done_mask = Variable(torch.from_numpy(n_done_mask)).type(dtype)
-
         if self.add_non_pixel:
             # input batches to networks
             # get the Q values for current observations for each action dimension
@@ -453,6 +447,11 @@ class DQfDAgent():
         # if pre-train
         # TODO
         if pre_train:
+            obs_tpn, rew_n, non_pixel_obs_tpn,n_done_mask = self.replay_buffer.n_step_sample(self.trajectory_n, idxes, self.gamma)
+            obs_tpn = Variable(torch.from_numpy(obs_tpn)).type(dtype) / 255.0
+            rew_n = Variable(torch.from_numpy(rew_n)).type(dtype)
+            non_pixel_obs_tpn = Variable(torch.from_numpy(non_pixel_obs_tpn)).type(dtype)
+            n_done_mask = Variable(torch.from_numpy(n_done_mask)).type(dtype)
             
             dqloss = loss
             # supervised_learning margin loss
