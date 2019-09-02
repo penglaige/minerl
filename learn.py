@@ -220,7 +220,7 @@ class Agent():
         ep_rewards = []
         for ep in range(1, self.num_episodes + 1):
             total_rewards = 0
-            self.last_obs, _ = self.env.reset()
+            self.last_obs = self.env.reset()
 
             done = False
             while not done:
