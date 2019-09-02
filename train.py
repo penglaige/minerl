@@ -42,7 +42,7 @@ optimizer = OptimizerSpec(
 )
 
 # models parameter
-demo = True
+demo = False
 task = 'MineRLNavigateDense-v0'
 PRE_TRAIN_STEPS = 100000
 trajectory_n = 10
