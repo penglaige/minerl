@@ -241,9 +241,11 @@ class DQfDAgent():
                 ### Step the agent and store the transition
                 # store last frame, returned idx used later
                 last_pov = self.last_obs["pov"]  # pixel feature
-                last_compass = self.last_obs["compassAngle"] # non_pixel_feature
-                last_dirt = self.last_obs["inventory"]["dirt"]  # non_pixel_feature
-                last_non_pixel_feature = np.array([last_compass / 180.0, last_dirt / 64.0]).reshape(1,2)
+                last_non_pixel_feature = None
+                if self.add_non_pixel:
+                    last_compass = self.last_obs["compassAngle"] # non_pixel_feature
+                    last_dirt = self.last_obs["inventory"]["dirt"]  # non_pixel_feature
+                    last_non_pixel_feature = np.array([last_compass / 180.0, last_dirt / 64.0]).reshape(1,2)
                 last_stored_frame_idx = self.replay_buffer.store_frame(last_pov, last_non_pixel_feature)
 
                 # get observations to input to Q netword
@@ -260,9 +262,9 @@ class DQfDAgent():
                     threshold = self.exploration.value(self.t)
                     if sample > threshold:
                         obs = torch.from_numpy(observations).unsqueeze(0).type(dtype) / 255.0
-                        non_pixel_feature = torch.from_numpy(non_pixel_feature).type(dtype)
                         with torch.no_grad():
                             if self.add_non_pixel:
+                                non_pixel_feature = torch.from_numpy(non_pixel_feature).type(dtype)
                                 action = self.Q(obs,non_pixel_feature)
                             else:
                                 action = self.Q(obs)
