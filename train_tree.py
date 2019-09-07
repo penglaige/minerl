@@ -206,9 +206,9 @@ else:
             dueling_dqn=dueling_dqn
     )
     agent.pre_train()
-    #agent.run()
+    agent.run()
 #--------------------------- Begin Minecraft game -----------------------------------------------------
-print("-----------------------Training ends-----------------------")
+prt("-----------------------Training ends-----------------------")
 
 
 
