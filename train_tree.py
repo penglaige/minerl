@@ -42,9 +42,9 @@ optimizer = OptimizerSpec(
 )
 
 # models parameter
-demo = False
+demo = True
 task = 'MineRLTreechop-v0'
-PRE_TRAIN_STEPS = 100000
+PRE_TRAIN_STEPS = 200000
 trajectory_n = 10
 iteration = 3
 action_space = []
@@ -206,7 +206,7 @@ else:
             dueling_dqn=dueling_dqn
     )
     agent.pre_train()
-    agent.run()
+    #agent.run()
 #--------------------------- Begin Minecraft game -----------------------------------------------------
 print("-----------------------Training ends-----------------------")
 
