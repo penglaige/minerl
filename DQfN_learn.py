@@ -20,6 +20,9 @@ import time
 import pickle
 from tqdm import tqdm
 
+from utils.parser import parse_action_space, dddqn_parse_action_space, parse_obs_space
+from utils.utils import *
+
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs"])
 
 #CUDA variables
@@ -37,18 +40,13 @@ class DQfDAgent():
     """
 
     def __init__(self,env,q_func,optimizer_spec,
-        task,
-        action_space,
+        task, obs_space, act_space,
         Lambda,
         convs = [(32,7,3),(64,4,2),(64,3,1)],
         non_pixel_layer=[64],
-        non_pixel_input_size = 2,
-        add_non_pixel=False,
         in_feature = 7*7*64,
         hidden_actions = [128],
         hidden_value = [128],
-        num_branches = 11,
-        num_actions_for_branch = [2,2,2,2,2,2,2,2,2,36,36],
         aggregator="reduceLocalMean",
         exploration=LinearSchedule(200000, 0.1),
         stopping_criterion=None,
@@ -67,12 +65,10 @@ class DQfDAgent():
         trajectory_n=10,
         learning_freq=4,
         frame_history_len=4,
-        img_h=64,
-        img_w=64,
-        img_c=3,
+        img_h=64, img_w=64, img_c=3,
         target_update_freq=10000,
-        double_dqn=False,
-        dueling_dqn=False
+        double_dqn=True,
+        dueling_dqn=True
         ):
         """Run Deep Q-learning algorithm.
         You can specify your own convnet using q_func.
@@ -132,18 +128,15 @@ class DQfDAgent():
         self.env = env
         self.q_func = q_func
         self.task = task
+        self.obs_space = obs_space
+        self.act_space = act_space
         self.Lambda = Lambda
         self.trajectory_n = trajectory_n
         self.convs = convs
         self.non_pixel_layer = non_pixel_layer
-        self.non_pixel_input_size = non_pixel_input_size
-        self.add_non_pixel = add_non_pixel
         self.in_feature = in_feature
         self.hidden_actions = hidden_actions
         self.hidden_value = hidden_value
-        self.num_branches = num_branches
-        self.num_actions_for_branch = num_actions_for_branch
-        self.action_space = action_space
         self.aggregator = aggregator
         self.optimizer_spec = optimizer_spec
         self.exploration = exploration
@@ -172,28 +165,23 @@ class DQfDAgent():
         self.input_shape = (self.img_h, self.img_w, self.frame_history_len * self.img_c)
         self.in_channels = self.input_shape[2]
 
+        # parse obs_space and act_space
+        self.pixel_shape, self.non_pixel_obs, self.non_pixel_input_size = parse_obs_space(obs_space)
+        self.action_spaces, self.action_spaces_name = dddqn_parse_action_space(act_space)
+        self.num_branches = len(self.action_spaces)
+        self.add_non_pixel = True if self.non_pixel_input_size !=0 else False
+
         # define Q target and Q
-        if not self.add_non_pixel:
-            self.Q = self.q_func(self.convs, self.in_channels, 
-                                self.in_feature, self.hidden_actions, 
-                                self.hidden_value, self.num_branches, 
-                                self.num_actions_for_branch, self.aggregator).type(dtype)
-            self.Q_target = self.q_func(self.convs, self.in_channels, 
-                                self.in_feature, self.hidden_actions, 
-                                self.hidden_value, self.num_branches, 
-                                self.num_actions_for_branch, self.aggregator).type(dtype)
-        else:
-            # print("with non pixel feature")
-            self.Q = self.q_func(self.non_pixel_input_size, self.non_pixel_layer,
-                                self.convs, self.in_channels, 
-                                self.in_feature, self.hidden_actions, 
-                                self.hidden_value, self.num_branches, 
-                                self.num_actions_for_branch, self.aggregator).type(dtype)
-            self.Q_target = self.q_func(self.non_pixel_input_size, self.non_pixel_layer,
-                                self.convs, self.in_channels, 
-                                self.in_feature, self.hidden_actions, 
-                                self.hidden_value, self.num_branches, 
-                                self.num_actions_for_branch, self.aggregator).type(dtype)
+        self.Q = self.q_func(self.obs_space, self.act_space,
+                            self.non_pixel_layer, self.convs,
+                            self.in_channels, self.in_feature,
+                            self.hidden_actions, self.hidden_value,
+                            self.aggregator).type(dtype)
+        self.Q_target = self.q_func(self.obs_space, self.act_space,
+                            self.non_pixel_layer, self.convs,
+                            self.in_channels, self.in_feature,
+                            self.hidden_actions, self.hidden_value,
+                            self.aggregator).type(dtype)
 
         # initialize optimizer
         self.optimizer = self.optimizer_spec.constructor(self.Q.parameters(), **self.optimizer_spec.kwargs)
@@ -225,9 +213,9 @@ class DQfDAgent():
         self.Save_Reward_Every_N_EPs = 10
         
         ##########################
-        self.separate = [self.num_actions_for_branch[0]]
-        for i in range(1,len(self.num_actions_for_branch)-1):
-            self.separate.append(self.separate[-1] + self.num_actions_for_branch[i])
+        self.separate = [self.action_spaces[0]]
+        for i in range(1,len(self.action_spaces)-1):
+            self.separate.append(self.separate[-1] + self.action_spaces[i])
         self.separate = np.array(self.separate)
 
     def run(self):
@@ -240,16 +228,15 @@ class DQfDAgent():
             while not done:
                 ### Step the agent and store the transition
                 # store last frame, returned idx used later
-                last_pov = self.last_obs["pov"]  # pixel feature
-                last_non_pixel_feature = None
-                if self.add_non_pixel:
-                    last_compass = self.last_obs["compassAngle"] # non_pixel_feature
-                    last_dirt = self.last_obs["inventory"]["dirt"]  # non_pixel_feature
-                    last_non_pixel_feature = np.array([last_compass / 180.0, last_dirt / 64.0]).reshape(1,2)
+                last_pov, last_non_pixel_feature = get_obs_features(self.obs_space, self.last_obs)
+                last_non_pixel_feature = np.array(last_non_pixel_feature) / 180.0
+                last_non_pixel_feature = last_non_pixel_feature.reshape(1,-1)
+
                 last_stored_frame_idx = self.replay_buffer.store_frame(last_pov, last_non_pixel_feature)
 
                 # get observations to input to Q netword
                 observations = self.replay_buffer.encode_recent_observation()
+                non_pixel_feature = None
                 if self.add_non_pixel:
                     non_pixel_feature = self.replay_buffer.encode_recent_non_pixel_feature()
 
@@ -265,9 +252,7 @@ class DQfDAgent():
                         with torch.no_grad():
                             if self.add_non_pixel:
                                 non_pixel_feature = torch.from_numpy(non_pixel_feature).type(dtype)
-                                action = self.Q(obs,non_pixel_feature)
-                            else:
-                                action = self.Q(obs)
+                            action = self.Q(obs,non_pixel_feature)
                             
                             action = self.divide(action, self.separate)
 
@@ -314,11 +299,12 @@ class DQfDAgent():
 
                 # Save model
                 if self.Save_Model_Every_N_EPs > 0:
-                    if ep % self.Save_Model_Every_N_EPs == 0:
-                        if not os.path.exists("models"):
-                            os.makedirs("models")
-                        model_save_path = f"models/ep{ep}.model" 
-                        torch.save(self.Q.state_dict(), model_save_path)
+                    if done:
+                        if ep % self.Save_Model_Every_N_EPs == 0:
+                            if not os.path.exists("models"):
+                                os.makedirs("models")
+                            model_save_path = f"models/ep{ep}.model" 
+                            torch.save(self.Q.state_dict(), model_save_path)
                 else:
                     if self.t % self.Save_Model_Every_N_Steps == 0:
                         if not os.path.exists("models"):
@@ -329,6 +315,8 @@ class DQfDAgent():
     def train(self, pre_train=False):
         # Sample transition batch from replay memory
         # done_mash = 1 if next state is end of episode
+        non_pixel_obs_t = None
+        non_pixel_obs_tp1 = None
         if self.add_non_pixel:
             obs_t, act_t, rew_t, obs_tp1, done_mask, non_pixel_obs_t, non_pixel_obs_tp1, weights, idxes = self.replay_buffer.sample(self.batch_size, beta=self.beta_schedule.value(self.t))
             non_pixel_obs_t = Variable(torch.from_numpy(non_pixel_obs_t)).type(dtype)
@@ -341,7 +329,7 @@ class DQfDAgent():
         obs_tp1 = Variable(torch.from_numpy(obs_tp1)).type(dtype) / 255.0
         done_mask = Variable(torch.from_numpy(done_mask)).type(dtype)
 
-        if self.add_non_pixel:
+        if True:
             # input batches to networks
             # get the Q values for current observations for each action dimension
             q_values = self.Q(obs_t,non_pixel_obs_t)
@@ -442,117 +430,11 @@ class DQfDAgent():
                 loss /= self.num_branches
             # clip the error and flip--old
             #clipped_error = -1.0 * error.clamp(-1, 1)
-        else:
-            # input batches to networks
-            # get the Q values for current observations for each action dimension
-            q_values = self.Q(obs_t)
-            q_values = self.divide(q_values, self.separate)
-            #q_values = np.hsplit(q_values, self.separate)
-            q_s_a = []
-            for dim in range(self.num_branches):
-                selected_a = act_t[:,dim].view(act_t.size(0),-1)
-                q_value = q_values[dim]
-                q_s_a_dim = q_value.gather(1, selected_a)
-                q_s_a.append(q_s_a_dim)
-                #if dim == 0:
-                #    q_s_a = q_s_a_dim
-                #else:
-                #    q_s_a = torch.cat((q_s_a, q_s_a_dim),1)
 
-            # calculate target Q value:
-            if self.double_dqn:
-                # ---------------
-                #   double DQN
-                # ---------------
-
-                # get the Q values for best actions in obs_tp1
-                # based off the current Q network
-                # max(Q(s', a', theta_i)) wrt a'
-                q_tp1_values = self.Q(obs_tp1).detach()
-                q_tp1_values = self.divide(q_tp1_values, self.separate)
-                a_prime = []
-                for dim in range(self.num_branches):
-                    q_tp1_value = q_tp1_values[dim]
-                    _, a_prime_dim = q_tp1_value.max(1)
-                    a_prime.append(a_prime_dim)
-
-                # get Q values from frozen network for next state and chosen action
-                q_target_tp1_values = self.Q_target(obs_tp1).detach()
-                q_target_tp1_values = self.divide(q_target_tp1_values, self.separate)
-
-                expected_state_action_values = []
-                
-                for dim in range(self.num_branches):
-                    q_target_tp1_value = q_target_tp1_values[dim]
-                    q_target_s_a_prime_dim = q_target_tp1_value.gather(1,a_prime[dim].unsqueeze(1))
-                    q_target_s_a_prime_dim = q_target_s_a_prime_dim.squeeze()
-
-                    #if current state is end of episode, then there if no next Q value
-                    q_target_s_a_prime_dim = (1 - done_mask) * q_target_s_a_prime_dim
-
-                    # TODO ： mean td error
-                    expected_state_action_values_dim = (rew_t + self.gamma * q_target_s_a_prime_dim).view(self.batch_size, -1)
-                    #print("expected_state_action_values_dim size: ",expected_state_action_values_dim.size())
-                    expected_state_action_values.append(expected_state_action_values_dim)
-
-                # calculate loss
-                branch_losses = []
-                for dim in range(self.num_branches):
-                    td_error_dim = q_s_a[dim] - expected_state_action_values[dim]
-                    if dim == 0:
-                        td_error = torch.abs(td_error_dim)
-                    else:
-                        #td_error = torch.cat((td_error, torch.abs(td_error_dim)),1)
-                        td_error += td_error_dim
-                    #td_error /= self.num_brunches
-
-                    loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_state_action_values[dim])
-                    #print("loss_dim: ",loss_dim)
-                    branch_losses.append(loss_dim)
-                
-                loss = sum(branch_losses) / self.num_branches
-
-            else:
-                # -----------------
-                #   regular DQN
-                # -----------------
-
-                # get the Q values for best actions in obs_tp1
-                # based off frozen Q network
-                # max(Q(s', a', theta_i_frozen)) wrt a'
-                q_tp1_values = self.Q_target(obs_tp1).detach()
-                q_tp1_values = self.divide(q_tp1_values, self.separate)
-                q_s_a_prime = []
-                a_prime = []
-                loss = 0
-                for dim in range(self.num_branches):
-                    q_tp1_value = q_tp1_values[dim]
-                    q_s_a_prime_dim, a_prime_dim = q_tp1_value.max(1)
-
-                    q_s_a_prime_dim = (1 - done_mask) * q_s_a_prime_dim
-                    q_s_a_prime.append(q_s_a_prime_dim)
-                    a_prime.append(a_prime_dim)
-
-                    expected_state_action_values_dim = rew_t + self.gamma * q_s_a_prime_dim
-
-                    td_error_dim = q_s_a[dim] - expected_state_action_values_dim
-                    if dim == 0:
-                        td_error = torch.abs(td_error_dim)
-                    else:
-                        td_error += torch.abs(td_error_dim)
-
-                    loss_dim = F.smooth_l1_loss(q_s_a[dim],expected_state_action_values_dim)
-                    loss += loss_dim
-                loss /= self.num_branches
-            # clip the error and flip--old
-            #clipped_error = -1.0 * error.clamp(-1, 1)
-
-
-        # backwards pass
-        self.optimizer.zero_grad()
         # if pre-train
         # TODO
         if pre_train:
+            non_pixel_obs_tpn = None
             if self.add_non_pixel:
                 obs_tpn, rew_n, non_pixel_obs_tpn,n_done_mask = self.replay_buffer.n_step_sample(self.trajectory_n, idxes, self.gamma)
                 non_pixel_obs_tpn = Variable(torch.from_numpy(non_pixel_obs_tpn)).type(dtype)
@@ -567,7 +449,7 @@ class DQfDAgent():
             # supervised_learning margin loss
             slm_loss = 0
             # n-step loss
-            if self.add_non_pixel:
+            if True:
                 q_tpn_values = self.Q(obs_tpn,non_pixel_obs_tpn).detach()
                 q_tpn_values = self.divide(q_tpn_values, self.separate)
                 an_prime = []
@@ -602,44 +484,11 @@ class DQfDAgent():
                     n_branch_losses.append(n_loss_dim)
 
                 n_step_loss = sum(n_branch_losses) / self.num_branches
-            else:
-                q_tpn_values = self.Q(obs_tpn).detach()
-                q_tpn_values = self.divide(q_tpn_values, self.separate)
-                an_prime = []
-                for dim in range(self.num_branches):
-                    q_tpn_value = q_tpn_values[dim]
-                    _, an_prime_dim = q_tpn_value.max(1)
-                    an_prime.append(an_prime_dim)
-
-                q_target_tpn_values = self.Q_target(obs_tpn).detach()
-                q_target_tpn_values = self.divide(q_target_tpn_values, self.separate)
-
-                expected_n_state_action_values = []
-
-                for dim in range(self.num_branches):
-                    q_target_tpn_value = q_target_tpn_values[dim]
-                    q_target_s_a_n_prime_dim = q_target_tpn_value.gather(1, an_prime[dim].unsqueeze(1))
-                    q_target_s_a_n_prime_dim = q_target_s_a_n_prime_dim.squeeze()
-
-                    q_target_s_a_n_prime_dim = (1 - n_done_mask) * q_target_s_a_n_prime_dim
-                    expected_n_state_action_values_dim = (rew_n + self.gamma ** self.trajectory_n * q_target_s_a_n_prime_dim).view(self.batch_size, -1)
-                    expected_n_state_action_values.append(expected_n_state_action_values_dim)
-
-                n_branch_losses = []
-                for dim in range(self.num_branches):
-                    n_td_error_dim = q_s_a[dim] - expected_n_state_action_values[dim]
-                    if dim == 0:
-                        n_td_error = torch.abs(n_td_error_dim)
-                    else:
-                        n_td_error += torch.abs(n_td_error_dim)
-                    n_loss_dim = F.smooth_l1_loss(q_s_a[dim], expected_n_state_action_values[dim])
-
-                    n_branch_losses.append(n_loss_dim)
-
-                n_step_loss = sum(n_branch_losses) / self.num_branches
 
             loss = self.Lambda[0] * dqloss + self.Lambda[1] * slm_loss + self.Lambda[2] * n_step_loss
 
+        # backwards pass
+        self.optimizer.zero_grad()
         # TODO?
         #print("loss: ",loss)
         loss.backward()
@@ -727,7 +576,7 @@ class DQfDAgent():
     def get_random_action(self):
         act = []
         for i in range(self.num_branches):
-            num = self.num_actions_for_branch[i]
+            num = self.action_spaces[i]
             a = np.random.randint(num)
             act.append(a)
         
@@ -739,20 +588,8 @@ class DQfDAgent():
         self.action_space [order of actions, camera at last]
         """
         action = self.env.action_space.noop()
-
-        for idx in range(len(self.action_space)):
-            a = self.action_space[idx]
-            if(a == 'camera'):
-                action[a] = [act[idx] * 10 - 180,act[idx+1] * 10 - 180]
-            elif (a == 'place'):
-                if(act[idx] == 0):
-                    action[a] = 'none'
-                else:
-                    action[a] = 'dirt'
-            else:
-                action[a] = act[idx]
         
-        return action
+        return get_actions(act, self.act_space, action)
 
     def divide(self, x, separate_list):
         x_sep = []
@@ -765,14 +602,6 @@ class DQfDAgent():
         cur = x[:,separate_list[i]:]
         x_sep.append(cur)
         return x_sep
-
-    def camera_transform(self,x):
-        x = x + 180
-        if (x >= 350):
-            y = int(x / 10)
-        else:
-            y = round(x / 10)
-        return y
 
     def store_demo_data(self):
         """
@@ -795,21 +624,13 @@ class DQfDAgent():
                     if metadata['success'] == False:
                         break
                     total_frames += 1
-                    frame = current_state['pov']
-                    non_pixel_feature = None
-                    if self.add_non_pixel:
-                        compass = current_state['compassAngle']
-                        dirt = current_state['inventory']['dirt']
-                        non_pixel_feature = np.array([compass / 180.0, dirt / 64.0]).reshape(1, 2)
+                    frame, non_pixel_feature = get_obs_features(self.obs_space, current_state)
+                    non_pixel_feature = np.array(non_pixel_feature) / 180.0
+                    non_pixel_feature = non_pixel_feature.reshape(1,-1)
+                    
                     idx = self.replay_buffer.store_frame(frame, non_pixel_feature)
 
-                    act = []
-                    for a in self.action_space:
-                        if a == 'camera':
-                            act.append(self.camera_transform(action[a][0]))
-                            act.append(self.camera_transform(action[a][1]))
-                        else:
-                            act.append(action[a])
+                    act = transfer_actions(action, self.act_space)
 
                     reward = np.clip(reward, -1.0, 1.0)
                     done_int = 1 if done else 0
