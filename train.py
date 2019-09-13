@@ -23,28 +23,27 @@ import logging
 import struct
 import socket
 
-# Global Variables
-BATCH_SIZE = 32
-FRAME_HISTORY_LEN = 4
-TARGET_UPDATE_FREQ = 2000
-GAMMA = 0.99
-LEARNING_FREQ = 4
-LEARNING_RATE = 0.00025
-ALPHA = 0.95
-EPS = 0.01
-LAMBDA = [1.0, 0.0, 1.0, 10e-5]  # for [loss_dq, loss_n_dq, loss_jeq, loss_l2]
-RESIZE_WIDTH  = 64
-RESIZE_HEIGHT = 64
-CUDA_VISIBLE_DEVICES = 0
-
-optimizer = OptimizerSpec(
-    constructor=optim.RMSprop,
-    kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS,weight_decay=LAMBDA[3])
-)
-
 def main():
     args = get_args()
 
+    # Global Variables
+    BATCH_SIZE = 32
+    FRAME_HISTORY_LEN = 4
+    TARGET_UPDATE_FREQ = 2000
+    GAMMA = 0.99
+    LEARNING_FREQ = 4
+    LEARNING_RATE = 0.00025
+    ALPHA = 0.95
+    EPS = 0.01
+    LAMBDA = [1.0, 0.0, 1.0, 10e-5]  # for [loss_dq, loss_n_dq, loss_jeq, loss_l2]
+    RESIZE_WIDTH  = 64
+    RESIZE_HEIGHT = 64
+    CUDA_VISIBLE_DEVICES = 0
+
+    optimizer = OptimizerSpec(
+        constructor=optim.RMSprop,
+        kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS,weight_decay=LAMBDA[3])
+    )
     # arguments
     seed = args.seed
     train = False if args.train == 'minitrain' else True
