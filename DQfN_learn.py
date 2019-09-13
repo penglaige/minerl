@@ -169,7 +169,7 @@ class DQfDAgent():
         self.pixel_shape, self.non_pixel_obs, self.non_pixel_input_size = parse_obs_space(obs_space)
         self.action_spaces, self.action_spaces_name = dddqn_parse_action_space(act_space)
         self.num_branches = len(self.action_spaces)
-        
+
         self.add_non_pixel = True if self.non_pixel_input_size !=0 else False
 
         # define Q target and Q
@@ -632,6 +632,7 @@ class DQfDAgent():
                     idx = self.replay_buffer.store_frame(frame, non_pixel_feature)
 
                     act = transfer_actions(action, self.act_space)
+                    assert len(size) == self.num_branches
 
                     reward = np.clip(reward, -1.0, 1.0)
                     done_int = 1 if done else 0

@@ -70,7 +70,7 @@ def transfer_actions(action, act_space):
     """
     transfer action_space in env to action [1,1,1....]
     """
-    print(action)
+    #print(action)
     action_spaces = []
     res = []
     for act in act_space.spaces:
@@ -79,10 +79,7 @@ def transfer_actions(action, act_space):
             res.append(action[act])
         elif act_space[act].__class__.__name__ == 'Enum':
             action_spaces.append(len(act_space[act].values))
-            for i in range(len(act_space[act].values)):
-                if act_space[act].values[i] == action[act]:
-                    print(action[act])
-                    res.append(i)
+            res.append(action[act])
         elif act == 'camera':
             res.append(camera_transform(action[act][0]))
             res.append(camera_transform(action[act][1]))
