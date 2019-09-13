@@ -169,6 +169,7 @@ class DQfDAgent():
         self.pixel_shape, self.non_pixel_obs, self.non_pixel_input_size = parse_obs_space(obs_space)
         self.action_spaces, self.action_spaces_name = dddqn_parse_action_space(act_space)
         self.num_branches = len(self.action_spaces)
+        print(self.num_branches)
         self.add_non_pixel = True if self.non_pixel_input_size !=0 else False
 
         # define Q target and Q

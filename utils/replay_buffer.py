@@ -220,6 +220,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         super(PrioritizedReplayBuffer, self).__init__(size, frame_history_len,non_pixel_dimension,add_non_pixel)
         
         self.num_branches = num_branches
+        print("replay buffer ", self.num_branches)
 
         assert alpha > 0
         self._alpha = alpha
