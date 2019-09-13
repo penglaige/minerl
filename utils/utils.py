@@ -70,6 +70,7 @@ def transfer_actions(action, act_space):
     """
     transfer action_space in env to action [1,1,1....]
     """
+    print(action)
     action_spaces = []
     res = []
     for act in act_space.spaces:
@@ -80,6 +81,7 @@ def transfer_actions(action, act_space):
             action_spaces.append(len(act_space[act].values))
             for i in range(len(act_space[act].values)):
                 if act_space[act].values[i] == action[act]:
+                    print(action[act])
                     res.append(i)
         elif act == 'camera':
             res.append(camera_transform(action[act][0]))
