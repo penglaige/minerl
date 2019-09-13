@@ -632,7 +632,7 @@ class DQfDAgent():
                     idx = self.replay_buffer.store_frame(frame, non_pixel_feature)
 
                     act = transfer_actions(action, self.act_space)
-                    assert len(size) == self.num_branches
+                    assert len(act) == self.num_branches
 
                     reward = np.clip(reward, -1.0, 1.0)
                     done_int = 1 if done else 0
