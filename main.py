@@ -82,8 +82,8 @@ def main():
     device = torch.device("cuda:0" if args.gpu else "cpu")
     print("device:", device)
     gpu = args.gpu
-    print("current available gpu numbers: %d" %torch.cuda.device_count())
     if (gpu == True):
+        print("current available gpu numbers: %d" %torch.cuda.device_count())
         if torch.cuda.is_available():
             torch.cuda.set_device(CUDA_VISIBLE_DEVICES)
             print("CUDA Device: %d" %torch.cuda.current_device())

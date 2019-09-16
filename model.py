@@ -78,7 +78,7 @@ class Policy(nn.Module):
 
         for i in range(self.num_branches):
             idx = self.dist_idxes[i]
-            # actor_feature: torch (32, 128)
+            # actor_feature: torch (batch, 128)
             actor_feature = actor_features[i]
             dist = self.__getattr__("dist" + str(idx))(actor_feature)
             dists.append(dist)
@@ -89,10 +89,12 @@ class Policy(nn.Module):
                 action = dist.sample()
 
             # use action() to get values.
+            # action: size: batch x 1
             action = action.type(dtype)
             actions.append(action)
             
             action_log_prob = dist.log_probs(action)
+            # action_log_prob size:  batch x 1
             action_log_probs.append(action_log_prob)
 
             dist_entropy = dist.entropy().mean()
