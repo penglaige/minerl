@@ -143,7 +143,7 @@ def main():
     ep = 0
     ep_rewards = []
     mean_episode_reward = []
-    best_mean_episode_reward = []
+    best_mean_episode_reward = 0.0
     total_rewards = 0
 
     for j in range(num_updates):
