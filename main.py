@@ -175,9 +175,9 @@ def main():
             pov = (torch.from_numpy(pov.copy())).reshape(1,*pov.shape)
             non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(1,-1).type(dtype)
             # TODO:replace by num process
+            total_rewards += reward
             reward = torch.tensor([reward]).reshape(1,-1).type(dtype)
 
-            total_rewards += reward
             if done:
                 ep += 1
                 ep_rewards.append(total_rewards)
