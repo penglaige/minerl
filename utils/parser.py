@@ -7,13 +7,18 @@ def get_args():
     parser.add_argument(
         '--train',
         help='train or mini-train for test',
-        type=str, 
-        default='minitrain')
+        action='store_true',
+        default=False)
     parser.add_argument(
         '--gpu',
-        type=str,
-        default='false',
+        action='store_true',
+        default=False,
         help='whether to use gpu')
+    parser.add_argument(
+        '--cuda-deterministic',
+        action='store_true',
+        default=False,
+        help="sets flags for determinism when using CUDA (potentially slow!)")
     parser.add_argument(
         '--task', 
         help='experiment task', 
@@ -24,10 +29,45 @@ def get_args():
         type=int, 
         default=0)
     parser.add_argument(
+        '--frame-history-len',
+        type=int,
+        default=1,
+        help='frame history length (default: 4)')
+    parser.add_argument(
+        '--lr',
+        type=float,
+        default=0.00025,
+        help='learning rate (default: 0.00025)')
+    parser.add_argument(
+        '--eps',
+        type=float,
+        default=0.01,
+        help='RMSprop optimizer epsilon (default: 1e-5)')
+    parser.add_argument(
+        '--alpha',
+        type=float,
+        default=0.95,
+        help='RMSprop optimizer alpha (default: 0.99)')
+    parser.add_argument(
+        '--gamma',
+        type=float,
+        default=0.99,
+        help='discount factor for rewards (dafault: 0.99)')
+    parser.add_argument(
+        '--use-gae',
+        action='store_true',
+        default=False,
+        help='use generalized advantage estimation')
+    parser.add_argument(
+        '--gae-lambda',
+        type=float,
+        default=0.95,
+        help='gae lambda parameter (default: 0.95)')
+    parser.add_argument(
         '--demo',
         help='pre-train with human demonstration',
-        type=str, 
-        default='false')
+        action='store_true',
+        default=False)
     parser.add_argument(
         '--pre_train_steps', 
         help='human demo pre-train steps',
@@ -66,6 +106,11 @@ def get_args():
         default=0.5,
         help='value loss coefficient (default: 0.5)')
     parser.add_argument(
+        '--max-grad-norm',
+        type=float,
+        default=0.5,
+        help='max norm of gradients (default: 0.5)')
+    parser.add_argument(
         '--num-processes',
         type=int,
         default=1,
@@ -80,6 +125,11 @@ def get_args():
         type=int,
         default=4,
         help='number of ppo epochs (default:4)')
+    parser.add_argument(
+        '--num-mini-batch',
+        type=int,
+        default=5,
+        help='number of batches for ppo (default: 32)')
     parser.add_argument(
         '--clip-param',
         type=float,
@@ -105,6 +155,28 @@ def get_args():
         type=int,
         default=1000,
         help='number of environment eps to train (default: 1000)')
+    parser.add_argument(
+        '--num-env-steps',
+        type=int,
+        default=10e6,
+        help='number of environment steps to train (default: 10e6)')
+    parser.add_argument(
+        '--save-model-dir',
+        default='./models/',
+        help='directory to save models (default: ./models/)')
+    parser.add_argument(
+        '--log-dir',
+        default='./logs/',
+        help='directory t0 save agent logs (default: ./logs/)')
+    parser.add_argument(
+        '--save-performance-dir',
+        default='./perform_records/',
+        help='directory to save performance records (default: ./perform_records/)')
+    parser.add_argument(
+        '--use-proper-time-limits',
+        action='store_true',
+        default=False,
+        help='compute returns taking into account time limits')
     args = parser.parse_args()
 
     assert args.algo in ['a2c', 'ppo']

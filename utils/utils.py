@@ -1,3 +1,7 @@
+import numpy as np
+import os
+import pickle
+
 def get_obs_features(obs_space, last_obs):
     last_pov = None
     last_non_pixel_features = []
@@ -41,12 +45,12 @@ def get_actions(acts, act_space, action):
         if act_space[act].__class__.__name__ == 'Discrete':
             action_spaces_name.append(act)
             action_spaces.append(act_space[act].n)
-            action[act] = acts[idx]
+            action[act] = int(acts[idx])
             idx += 1
         elif act_space[act].__class__.__name__ == 'Enum':
             action_spaces_name.append(act)
             action_spaces.append(len(act_space[act].values))
-            action[act] = act_space[act].values[acts[idx]]
+            action[act] = act_space[act].values[int(acts[idx])]
             idx += 1
         elif act == 'camera':
             action_spaces_name.append('pitch')
@@ -54,6 +58,34 @@ def get_actions(acts, act_space, action):
             action_spaces.append(36)
             action_spaces.append(36)
             action[act] = [acts[idx] * 10 - 180, acts[idx + 1] * 10 - 180]
+            idx += 2
+
+    return action
+
+def get_actions_continuous(acts, act_space, action):
+    """
+    transfer action [1,1,1....] to action_space in env 
+    """
+    action_spaces = []
+    action_spaces_name = []
+    idx = 0
+    for act in act_space.spaces:
+        if act_space[act].__class__.__name__ == 'Discrete':
+            action_spaces_name.append(act)
+            action_spaces.append(act_space[act].n)
+            action[act] = int(acts[idx])
+            idx += 1
+        elif act_space[act].__class__.__name__ == 'Enum':
+            action_spaces_name.append(act)
+            action_spaces.append(len(act_space[act].values))
+            action[act] = act_space[act].values[int(acts[idx])]
+            idx += 1
+        elif act == 'camera':
+            action_spaces_name.append('pitch')
+            action_spaces_name.append('yaw')
+            action_spaces.append(1)
+            action_spaces.append(1)
+            action[act] = [acts[idx], acts[idx + 1]]
             idx += 2
 
     return action
@@ -87,5 +119,30 @@ def transfer_actions(action, act_space):
             action_spaces.append(36)
 
     return res
+
+def log(j, ep, ep_rewards, mean_episode_reward, best_mean_episode_reward):
+    Save_Reward_Every_N_EPs = 10
+    if len(ep_rewards) > 0:
+        mean_episode_reward = np.mean(ep_rewards[-20:])
+        best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+    
+    print("num_param_updates:%d" % j)
+    print("ep reward: %f" % ep_rewards[-1])
+    print("mean reward (20 episodes) %f" % mean_episode_reward)
+    print("best mean reward %f" % best_mean_episode_reward)
+    print("---------------------------------------")
+
+    #=================== TensorBoard logging =============#
+    if ep % Save_Reward_Every_N_EPs == 0:
+
+        data = {"total_rewards":ep_rewards}
+
+        if not os.path.exists("perform_records"):
+            os.makedirs("perform_records")
+
+        save_path = f"perform_records/ep{ep}.pkl"
+        f = open(save_path,"wb")
+        pickle.dump(data,f)
+        f.close()
 
 

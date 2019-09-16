@@ -99,6 +99,7 @@ class DiagGaussian(nn.Module):
 
     def forward(self, x):
         action_mean = self.fc_mean(x)
+        # action_mean size: batch x 1
 
         zeros = torch.zeros(action_mean.size())
         if x.is_cuda:

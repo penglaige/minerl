@@ -7,6 +7,9 @@ import torch.nn.functional as F
 from utils.distributions import Bernoulli, Categorical, DiagGaussian, init
 from utils.parser import parse_action_space, parse_obs_space, dddqn_parse_action_space
 
+dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+dlongtype = torch.cuda.LongTensor if torch.cuda.is_available() else torch.LongTensor
+
 class Policy(nn.Module):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
         super(Policy, self).__init__()
@@ -68,6 +71,7 @@ class Policy(nn.Module):
         value, actor_features = self.base(x, non_pixel_features)
 
         # calculate dist for different branches
+        batch_size = x.size(0)
         dists = []
         actions = []
         action_log_probs = []
@@ -85,7 +89,7 @@ class Policy(nn.Module):
                 action = dist.sample()
 
             # use action() to get values.
-            
+            action = action.type(dtype)
             actions.append(action)
             
             action_log_prob = dist.log_probs(action)
@@ -93,8 +97,11 @@ class Policy(nn.Module):
 
             dist_entropy = dist.entropy().mean()
 
+        actions = torch.cat(actions,1).reshape(batch_size,-1)
+        action_log_probs = torch.cat(action_log_probs, 1).reshape(batch_size, -1)
+
         # value size: batch x 1
-        # actions size: list, list[0].size() == 32 x hidden_feature_size(128)
+        # actions size: list, list[0].size() == 32 x action_num for each dimension
         # action_log_probs : list, len = branches, 32 x hidden_feature_size
         return value, actions, action_log_probs
 
@@ -103,6 +110,12 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, x, non_pixel_features, actions):
+        """
+        x: torch.tensor (batch, c,h,w)
+        non_pixel_features: torch.tensor (batch, num_features)
+        actions: torch.tensor (batch, num_branches)
+        """
+        batch_size = actions.size(0)
         value, actor_features = self.base(x, non_pixel_features)
 
         # calculate dist for different branches
@@ -114,14 +127,19 @@ class Policy(nn.Module):
             actor_feature = actor_features[i]
             dist = self.__getattr__("dist" + str(idx))(actor_feature)
 
-            action = actions[i]
+            #
+            action = actions[:,i].view(actions.size(0),-1)
             
             action_log_prob = dist.log_probs(action)
             action_log_probs.append(action_log_prob)
 
             dist_entropy = dist.entropy().mean()
             dist_entropys.append(dist_entropy)
+
+        action_log_probs = torch.cat(action_log_probs, 1).reshape(batch_size, -1)
+        #dist_entropys = torch.cat(dist_entropys, 1).reshape(batch_size, -1)
         # dist_entropys len() = branches, for each action space dimension
+        # dist_entropys: [dist_entropy:  tensor(0.6931, grad_fn=<MeanBackward0>) torch.Size([]) ]
         return value, action_log_probs, dist_entropys
 
 

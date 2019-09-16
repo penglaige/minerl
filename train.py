@@ -9,6 +9,7 @@ from model import Branch_DDDQN
 from learn import Agent, OptimizerSpec
 from DQfN_learn import DQfDAgent
 from utils.schedules import *
+from utils.replay_buffer import *
 from utils.parser import get_args
 
 from builtins import range

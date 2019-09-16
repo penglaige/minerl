@@ -525,6 +525,7 @@ class DQfDAgent():
         print('Timestep %d' %(self.t))
         print("learning started? %d" % (self.t >= self.learning_starts))
         print("num_param_updates:%d" % self.num_param_updates)
+        print("ep reward: %f" % ep_rewards[-1])
         print("mean reward (20 episodes) %f" % self.mean_episode_reward)
         print("best mean reward %f" % self.best_mean_episode_reward)
         print("exploration %f" % self.exploration.value(self.t))
