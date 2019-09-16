@@ -18,6 +18,7 @@ FixedCategorical = torch.distributions.Categorical
 
 old_sample = FixedCategorical.sample
 # sample is a function name
+# 不改变的话 sample的output size 是 [batch]
 # make the outout size to batch x 1
 FixedCategorical.sample = lambda self: old_sample(self).unsqueeze(-1)
 

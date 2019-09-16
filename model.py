@@ -98,6 +98,7 @@ class Policy(nn.Module):
             action_log_probs.append(action_log_prob)
 
             dist_entropy = dist.entropy().mean()
+            # dist_entropy size: batch_size, mean 了之后就只有一个值了。所有batch的平均值？？
 
         actions = torch.cat(actions,1).reshape(batch_size,-1)
         action_log_probs = torch.cat(action_log_probs, 1).reshape(batch_size, -1)

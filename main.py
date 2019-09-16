@@ -108,8 +108,8 @@ def main():
                     args.num_mini_batch,
                     args.value_loss_coef,
                     args.entropy_coef,
-                    lr=args.lr,
-                    eps=args.eps,
+                    lr=7e-4,
+                    eps=1e-5,
                     max_grad_norm=args.max_grad_norm,
         )
     else:
@@ -181,7 +181,7 @@ def main():
             if done:
                 ep += 1
                 ep_rewards.append(total_rewards)
-                log(j, ep, ep_rewards, mean_episode_reward, best_mean_episode_reward)
+                log(j, ep, np.array(ep_rewards), mean_episode_reward, best_mean_episode_reward)
 
             # If done then clean the history of observations.
             # implement for 1 process
