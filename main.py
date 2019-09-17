@@ -59,7 +59,7 @@ def main():
     dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
     if not train:
-        args.num_env_steps = 10000
+        args.num_env_steps = 50000
 
     base_kwargs = {
         'non_pixel_layer':non_pixel_layer,
@@ -240,7 +240,7 @@ def main():
             end = time.time()
             print("----------- Logs -------------")
             print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
+                "Updates {}, num timesteps {}, FPS {} \n The {}th training episodes,\n mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
                     j, total_num_steps,
                     int(total_num_steps / (end - start)),
                     len(ep_rewards),np.mean(ep_rewards),
@@ -249,6 +249,8 @@ def main():
                 )
 
             )
+    
+    print("-----------------------Training ends-----------------------")
 
 
 
