@@ -205,11 +205,12 @@ def main():
                 pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
                 non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(1,-1)
                 
+                # TODO: how to deal with reset
                 terminal_actions = torch.zeros(actions.size())
                 terminal_action_log_probs = torch.zeros(action_log_probs.size())
                 terminal_value = torch.zeros(value.size())
                 terminal_reward = torch.zeros(reward.size())
-                rollouts.insert(pov, non_pixel_feature, terminal_action, terminal_action_log_probs, terminal_value,
+                rollouts.insert(pov, non_pixel_feature, terminal_actions, terminal_action_log_probs, terminal_value,
                     terminal_reward, masks, bad_masks)
 
         with torch.no_grad():
