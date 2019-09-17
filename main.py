@@ -142,8 +142,8 @@ def main():
 
     ep = 0
     ep_rewards = []
-    mean_episode_reward = []
-    best_mean_episode_reward = 0.0
+    mean_episode_reward = None
+    best_mean_episode_reward = None
     total_rewards = 0
 
     for j in range(num_updates):
@@ -178,19 +178,39 @@ def main():
             total_rewards += reward
             reward = torch.tensor([reward]).reshape(1,-1).type(dtype)
 
-            if done:
-                ep += 1
-                ep_rewards.append(total_rewards)
-                log(j, ep, np.array(ep_rewards), mean_episode_reward, best_mean_episode_reward)
-
             # If done then clean the history of observations.
             # implement for 1 process
             # TODO: may not need bas_masks
             masks = torch.FloatTensor(
                 [[0.0] if done else [1.0]])
             bad_masks = torch.FloatTensor([[1.0]])
+
             rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
                 value, reward, masks, bad_masks)
+
+            # If done:
+            if done:
+                ep += 1
+                ep_rewards.append(total_rewards)
+                log(j, ep, np.array(ep_rewards), mean_episode_reward, best_mean_episode_reward)
+
+                total_rewards = 0
+
+                # reset
+                obs = env.reset()
+
+                pov, non_pixel_feature = get_obs_features(obs_space, obs)
+                pov = pov.transpose(2, 0, 1) / 250.0
+                # TODO: replace 1 with num_process
+                pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+                non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(1,-1)
+                
+                terminal_actions = torch.zeros(actions.size())
+                terminal_action_log_probs = torch.zeros(action_log_probs.size())
+                terminal_value = torch.zeros(value.size())
+                terminal_reward = torch.zeros(reward.size())
+                rollouts.insert(pov, non_pixel_feature, terminal_action, terminal_action_log_probs, terminal_value,
+                    terminal_reward, masks, bad_masks)
 
         with torch.no_grad():
             next_value = actor_critic.get_value(
