@@ -143,7 +143,7 @@ def get_args():
     parser.add_argument(
         '--save-interval',
         type=int,
-        default=100,
+        default=10000,
         help='save interval, one save per n updates (default: 100)')
     parser.add_argument(
         '--eval-interval',

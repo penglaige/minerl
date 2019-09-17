@@ -126,7 +126,7 @@ def log(j, ep, ep_rewards, mean_episode_reward, best_mean_episode_reward):
         mean_episode_reward = np.mean(ep_rewards[-20:])
         best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
     
-    print("----Ep %d -------" %ep)
+    print("---- Ep %d -------" %ep)
     print("num_param_updates:%d" % j)
     print("ep reward: %f" % ep_rewards[-1])
     print("mean reward (20 episodes) %f" % mean_episode_reward)

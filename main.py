@@ -240,7 +240,7 @@ def main():
             end = time.time()
             print("----------- Logs -------------")
             print(
-                "Updates {}, num timesteps {}, FPS {} \n The {}th training episodes,\n mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
+                "Updates {}, num timesteps {}, FPS {} \nThe {}th training episodes,\nmean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
                     j, total_num_steps,
                     int(total_num_steps / (end - start)),
                     len(ep_rewards),np.mean(ep_rewards),
