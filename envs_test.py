@@ -35,7 +35,7 @@ log_dir = None
 torch.set_num_threads(1)
 torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
-device = torch.device("cuda:0" if args.cuda else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 envs = make_vec_envs(task, seed, num_processes, gamma, log_dir, device, False)
 
