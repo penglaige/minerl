@@ -31,10 +31,9 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
                 os.path.join(log_dir, str(rank)),
                 allow_early_resets=allow_early_resets)
 
-        env = wrap_deepmind(env)
 
         # If the input has shape (W,H,3), wrap for PyTorch convolutions
-        env = TransposeImage(env, op=[2,0,1])
+        # env = TransposeImage(env, op=[2,0,1])
 
         return env
 
@@ -52,7 +51,7 @@ def make_vec_envs(env_name,
             for i in range(num_processes)]
     
     if len(envs) > 1:
-        envs = ShmemVecEnv(env, context='fork')
+        envs = ShmemVecEnv(envs, context='fork')
     else:
         envs = DummyVecEnv(envs)
     
