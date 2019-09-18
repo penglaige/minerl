@@ -69,29 +69,29 @@ def get_args():
         action='store_true',
         default=False)
     parser.add_argument(
-        '--pre_train_steps', 
+        '--pre-train-steps', 
         help='human demo pre-train steps',
         type=int,
         default=100000)
     parser.add_argument(
         '--algo',default='ppo',help='algorithm to use: a2c | ppo | dddqn')
     parser.add_argument(
-        '--replay_buffer_size',
+        '--replay-buffer-size',
         type=int,
         default=1000000,
         help='replay buffer size')
     parser.add_argument(
-        '--exploration_schedule',
+        '--exploration-schedule',
         type=int,
         default=1000000,
         help='exploration schedule')
     parser.add_argument(
-        '--learning_starts',
+        '--learning-starts',
         type=int,
         default=60000,
         help='start learning after steps')
     parser.add_argument(
-        '--prioritized_replay_beta_iters',
+        '--prioritized-replay-beta-iters',
         type=int,
         default=5500000,
         help='prioritized_replay_beta_iters')

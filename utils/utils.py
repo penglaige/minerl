@@ -120,7 +120,7 @@ def transfer_actions(action, act_space):
 
     return res
 
-def log(j, ep, ep_rewards, mean_episode_reward, best_mean_episode_reward):
+def log(j, ep, ep_rewards, best_mean_episode_reward):
     Save_Reward_Every_N_EPs = 10
     if len(ep_rewards) > 0:
         mean_episode_reward = np.mean(ep_rewards[-20:])
@@ -145,5 +145,7 @@ def log(j, ep, ep_rewards, mean_episode_reward, best_mean_episode_reward):
         f = open(save_path,"wb")
         pickle.dump(data,f)
         f.close()
+
+    return mean_episode_reward
 
 

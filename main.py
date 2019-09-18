@@ -12,7 +12,7 @@ import torch.optim as optim
 from model import Policy
 from ppo import PPO
 from utils.schedules import *
-from utils.parser import get_args
+from utils.parser import get_args, parse_obs_space
 from utils.storage import RolloutStorage
 from utils.utils import *
 from utils.replay_buffer import ReplayBuffer
@@ -117,6 +117,14 @@ def main():
 
     # storage
     replay_buffer = None
+    if args.frame_history_len > 1:
+        _, _, non_pixel_shape = parse_obs_space(obs_space)
+        add_non_pixel = True if non_pixel_shape > 0 else False
+        replay_buffer = ReplayBuffer(100000,
+                                    args.frame_history_len, 
+                                    non_pixel_shape,
+                                    add_non_pixel)
+
     rollouts = RolloutStorage(replay_buffer, args.frame_history_len, 
                             args.num_steps, args.num_processes,
                             obs_space, act_space)
@@ -124,9 +132,18 @@ def main():
     obs = env.reset()
 
     pov, non_pixel_feature = get_obs_features(obs_space, obs)
-    pov = pov.transpose(2, 0, 1) / 250.0
-    # TODO: replace 1 with num_process
-    pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+    if args.frame_history_len > 1:
+        last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
+        pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
+        # TODO: replace 1 with num_process
+        pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+    elif args.frame_history_len == 1:
+        pov = pov.transpose(2, 0, 1) / 255.0
+        # TODO: replace 1 with num_process
+        pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+    else:
+        raise NotImplementedError
+
     non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(1,-1)
 
     rollouts.obs[0].copy_(pov)
@@ -142,7 +159,7 @@ def main():
 
     ep = 0
     ep_rewards = []
-    mean_episode_reward = -float('nan')
+    #mean_episode_reward = -float('nan')
     best_mean_episode_reward = -float('inf')
     total_rewards = 0
 
@@ -160,6 +177,7 @@ def main():
             # value size: batch x 1
             # actions size: torch.Tensor batch x num_branches
             # action_log_probs : torch.Tensor batch x num_branches
+            #print(actions)
             actions_list = actions.squeeze().tolist()
 
             action = get_actions_continuous(actions_list, act_space, action_template)
@@ -167,12 +185,23 @@ def main():
             # step:
             #print(action)
             obs, reward, done, info = env.step(action)
-            if not train:
+            if args.num_env_steps <= 50000:
                 env.render()
 
             pov, non_pixel_feature = get_obs_features(obs_space, obs)
-            pov = pov.transpose(2, 0, 1) / 250.0
-            pov = (torch.from_numpy(pov.copy())).reshape(1,*pov.shape)
+
+            if args.frame_history_len > 1:
+                last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
+                pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
+                # TODO: replace 1 with num_process
+                pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+            elif args.frame_history_len == 1:
+                pov = pov.transpose(2, 0, 1) / 250.0
+                # TODO: replace 1 with num_process
+                pov = (torch.from_numpy(pov.copy())).reshape(1,*pov.shape)
+            else:
+                raise NotImplementedError
+
             non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(1,-1).type(dtype)
             # TODO:replace by num process
             total_rewards += reward
@@ -185,14 +214,10 @@ def main():
                 [[0.0] if done else [1.0]])
             bad_masks = torch.FloatTensor([[1.0]])
 
-            rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
-                value, reward, masks, bad_masks)
-
-            # If done:
             if done:
                 ep += 1
                 ep_rewards.append(total_rewards)
-                log(j, ep, np.array(ep_rewards), mean_episode_reward, best_mean_episode_reward)
+                best_mean_episode_reward = log(j, ep, np.array(ep_rewards), best_mean_episode_reward)
 
                 total_rewards = 0
 
@@ -200,18 +225,25 @@ def main():
                 obs = env.reset()
 
                 pov, non_pixel_feature = get_obs_features(obs_space, obs)
-                pov = pov.transpose(2, 0, 1) / 250.0
-                # TODO: replace 1 with num_process
-                pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+
+                if args.frame_history_len > 1:
+                    last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
+                    pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
+                    # TODO: replace 1 with num_process
+                    pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+                elif args.frame_history_len == 1:
+                    pov = pov.transpose(2, 0, 1) / 250.0
+                    # TODO: replace 1 with num_process
+                    pov = torch.from_numpy(pov.copy()).reshape(1,*pov.shape)
+                else:
+                    raise NotImplementedError
+
                 non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(1,-1)
-                
-                # TODO: how to deal with reset
-                terminal_actions = torch.zeros(actions.size())
-                terminal_action_log_probs = torch.zeros(action_log_probs.size())
-                terminal_value = torch.zeros(value.size())
-                terminal_reward = torch.zeros(reward.size())
-                rollouts.insert(pov, non_pixel_feature, terminal_actions, terminal_action_log_probs, terminal_value,
-                    terminal_reward, masks, bad_masks)
+
+            # ？
+            rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
+                value, reward, masks, bad_masks)
+
 
         with torch.no_grad():
             next_value = actor_critic.get_value(
