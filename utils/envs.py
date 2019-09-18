@@ -49,6 +49,9 @@ def make_vec_envs(env_name,
                 num_frame_stack=None):
     envs = [make_env(env_name, seed, i, log_dir, allow_early_resets)
             for i in range(num_processes)]
+
+    print("envs number, ",len(envs))
+    print("act_space: ",envs[0].action_space)
     
     if len(envs) > 1:
         envs = ShmemVecEnv(envs, context='fork')
