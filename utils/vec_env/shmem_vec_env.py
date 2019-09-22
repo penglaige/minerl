@@ -182,6 +182,8 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                 pipe.send(_write_obs(env.reset()))
             elif cmd == 'step':
                 obs, reward, done, info = env.step(data)
+                if(not obs):
+                    print("null obs!!!!!")
                 if done:
                     obs = env.reset()
                 pipe.send((_write_obs(obs), reward, done, info))
