@@ -7,17 +7,17 @@ from gym.spaces.box import Box
 from utils.parser import parse_obs_space
 
 from baselines import bench
-from baselines.common.atari_wrappers import make_atari, wrap_deepmind
-from baselines.common.vec_env import VecEnvWrapper
-from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-from baselines.common.vec_env.shmem_vec_env import ShmemVecEnv
-from baselines.common.vec_env.vec_normalize import \
+from utils.vec_env import VecEnvWrapper
+from utils.vec_env.dummy_vec_env import DummyVecEnv
+from utils.vec_env.shmem_vec_env import ShmemVecEnv
+from utils.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
 def make_env(env_id, seed, rank, log_dir, allow_early_resets):
     def _thunk():
         env = gym.make(env_id)
 
+        #print("seed: ", seed)
         env.seed(seed + rank)
 
         obs_space = env.observation_space
@@ -26,7 +26,7 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
 
 
         if log_dir is not None:
-            env = bench.Monitro(
+            env = bench.Monitor(
                 env,
                 os.path.join(log_dir, str(rank)),
                 allow_early_resets=allow_early_resets)
@@ -47,11 +47,15 @@ def make_vec_envs(env_name,
                 device,
                 allow_early_resets,
                 num_frame_stack=None):
-    envs = [make_env(env_name, seed, i, log_dir, allow_early_resets)
-            for i in range(num_processes)]
+    envs = [
+        make_env(env_name, seed, i, log_dir, allow_early_resets)
+            for i in range(num_processes)
+    ]
 
-    print("envs number, ",len(envs))
-    print("act_space: ",envs[0].action_space)
+    # envs = [_thunk, _thunk]
+
+    # print("envs number, ",len(envs))
+    # print("act_space: ",envs[0].action_space)
     
     if len(envs) > 1:
         envs = ShmemVecEnv(envs, context='fork')
@@ -106,6 +110,7 @@ class VecPyTorch(VecEnvWrapper):
         return obs
         
     def step_async(self, actions):
+        # actions: torch.tensor
         actions = actions.cpu().numpy()
         self.venv.step_async(actions)
 

@@ -113,7 +113,7 @@ def get_args():
     parser.add_argument(
         '--num-processes',
         type=int,
-        default=1,
+        default=8,
         help='how many traing CPU processes to use (default: 1)')
     parser.add_argument(
         '--num-steps',
@@ -128,7 +128,7 @@ def get_args():
     parser.add_argument(
         '--num-mini-batch',
         type=int,
-        default=5,
+        default=32,
         help='number of batches for ppo (default: 32)')
     parser.add_argument(
         '--clip-param',

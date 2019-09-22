@@ -34,6 +34,20 @@ def get_obs_features(obs_space, last_obs):
 
     return last_pov, last_non_pixel_features
 
+def multi_get_obs_features(obs):
+    non_pixel_obs = None
+    for key in obs:
+        if key == 'pov':
+            pov = obs['pov']
+        else:
+            if non_pixel_obs == None:
+                non_pixel_obs = obs[key].reshape(obs[key].size(0),-1)
+            else:
+                non_pixel_obs = np.concatenate((non_pixel_obs,obs[key].reshape(obs[key].size(0), -1)),1)
+
+    return pov, non_pixel_obs
+
+
 def get_actions(acts, act_space, action):
     """
     transfer action [1,1,1....] to action_space in env 
