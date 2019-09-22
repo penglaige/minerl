@@ -197,7 +197,7 @@ def main():
 
             # step:
             #print(actions)
-            obs, reward, done, info = envs.step(actions)
+            obs, reward, done, infos = envs.step(actions)
             if args.num_env_steps <= 50000:
                 envs.render()
 
@@ -224,8 +224,8 @@ def main():
             # implement for 1 process
             # TODO: may not need bas_masks
             masks = torch.FloatTensor(
-                [[0.0] if done else [1.0]])
-            bad_masks = torch.FloatTensor([[1.0]])
+                [[0.0] if done_ else [1.0] for done_ in done])
+            bad_masks = torch.FloatTensor([[1.0] for info in infos])
 
             if done:
                 ep += 1
