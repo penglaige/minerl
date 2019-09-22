@@ -96,7 +96,7 @@ def main():
     #obs_space = env.observation_space
     #act_space = env.action_space
     #action_template = env.action_space.noop()
-    envs = make_vec_envs(args.task, args.seed, args.num_process,
+    envs = make_vec_envs(args.task, args.seed, args.num_processes,
                     args.gamma, args.log_dir, device, False)
     obs_space = envs.venv.obs_space
     act_space = envs.venv.act_space
@@ -139,6 +139,7 @@ def main():
                             obs_space, act_space)
 
     obs = envs.reset()
+    print("reset obs pov size: ",obs['pov'].shape)
     # obs: key: inventory.dirt...
     # (num_processes, size)
 
@@ -150,7 +151,7 @@ def main():
         # TODO: replace 1 with num_process
         pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
     elif args.frame_history_len == 1:
-        pov = pov.transpose(2, 0, 1) / 255.0
+        pov = pov.transpose(0, 3, 1, 2) / 255.0
         # TODO: replace 1 with num_process
         pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
     else:
@@ -187,16 +188,16 @@ def main():
                     rollouts.non_pixel_obs[step])
 
             # value size: batch x 1
-            # actions size: torch.Tensor batch x num_branches
-            # action_log_probs : torch.Tensor batch x num_branches
+            # actions size: torch.Tensor num_processes x num_branches
+            # action_log_probs : torch.Tensor num_processes x num_branches
             #print(actions)
-            actions_list = actions.squeeze().tolist()
+            #actions_list = actions.squeeze().tolist()
 
-            action = get_actions_continuous(actions_list, act_space, action_template)
+            #action = get_actions_continuous(actions_list, act_space, action_template)
 
             # step:
-            #print(action)
-            obs, reward, done, info = envs.step(action)
+            #print(actions)
+            obs, reward, done, info = envs.step(actions)
             if args.num_env_steps <= 50000:
                 envs.render()
 
@@ -207,7 +208,7 @@ def main():
                 # TODO: replace 1 with num_process
                 pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
             elif args.frame_history_len == 1:
-                pov = pov.transpose(2, 0, 1) / 255.0
+                pov = pov.transpose(0, 3, 1, 2) / 255.0
                 # TODO: replace 1 with num_process
                 pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
             else:

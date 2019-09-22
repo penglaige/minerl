@@ -103,7 +103,7 @@ class ShmemVecEnv(VecEnv):
         for pipe, act in zip(self.parent_pipes, actions):
             act = act.tolist()
             act = self.get_action(act)
-            print("act:",act)
+            #print("act:",act)
             pipe.send(('step', act))
         self.waiting_step = True
 
@@ -147,7 +147,7 @@ class ShmemVecEnv(VecEnv):
         """
         action_template = self.action_template
         
-        return get_actions(act, self.act_space, action_template)
+        return get_actions_continuous(act, self.act_space, action_template)
 
 
 def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs_dtypes, keys):
