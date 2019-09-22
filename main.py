@@ -139,7 +139,7 @@ def main():
                             obs_space, act_space)
 
     obs = envs.reset()
-    print("reset obs pov size: ",obs['pov'].shape)
+    #print("reset obs pov size: ",obs['pov'].shape)
     # obs: key: inventory.dirt...
     # (num_processes, size)
 
@@ -148,11 +148,9 @@ def main():
     if args.frame_history_len > 1:
         last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
         pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-        # TODO: replace 1 with num_process
         pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
     elif args.frame_history_len == 1:
         pov = pov.transpose(0, 3, 1, 2) / 255.0
-        # TODO: replace 1 with num_process
         pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
     else:
         raise NotImplementedError
@@ -174,7 +172,7 @@ def main():
     ep_rewards = []
     #mean_episode_reward = -float('nan')
     best_mean_episode_reward = -float('inf')
-    total_rewards = 0
+    total_rewards = [0 for i in range(args.num_processes)]
 
     for j in range(num_updates):
         
@@ -205,34 +203,31 @@ def main():
             if args.frame_history_len > 1:
                 last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
                 pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-                # TODO: replace 1 with num_process
                 pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
             elif args.frame_history_len == 1:
                 pov = pov.transpose(0, 3, 1, 2) / 255.0
-                # TODO: replace 1 with num_process
                 pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
             else:
                 raise NotImplementedError
 
             non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(args.num_processes,-1)
 
-            # TODO:replace by num process
-            total_rewards += reward
-            reward = torch.tensor([reward]).reshape(1,-1).type(dtype)
+            for i in range(len(reward)):
+                total_rewards[i] += reward[i]
+            reward = torch.tensor([reward]).reshape(args.num_processes,-1).type(dtype)
 
-            # If done then clean the history of observations.
-            # implement for 1 process
             # TODO: may not need bas_masks
             masks = torch.FloatTensor(
                 [[0.0] if done_ else [1.0] for done_ in done])
             bad_masks = torch.FloatTensor([[1.0] for info in infos])
 
-            if done:
-                ep += 1
-                ep_rewards.append(total_rewards)
-                best_mean_episode_reward = log(j, ep, np.array(ep_rewards), best_mean_episode_reward)
+            for i in range(len(done)):
+                if done[i]:
+                    ep += 1
+                    ep_rewards.append(total_rewards[i])
+                    best_mean_episode_reward = log(j, ep, np.array(ep_rewards), best_mean_episode_reward)
 
-                total_rewards = 0
+                    total_rewards[i] = 0
             # ？
             rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
                 value, reward, masks, bad_masks)
