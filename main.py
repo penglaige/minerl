@@ -16,7 +16,7 @@ from utils.parser import get_args, parse_obs_space
 from utils.storage import RolloutStorage
 from utils.utils import *
 from utils.replay_buffer import ReplayBuffer
-from utils.vec_env.envs import make_vec_envs
+from utils.envs import make_vec_envs
 
 from builtins import range
 from past.utils import old_div
