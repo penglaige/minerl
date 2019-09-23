@@ -191,7 +191,7 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                     time.sleep(0.01)
                     print("reset....")
                     reset_done = False
-                    while reset_done:
+                    while not reset_done:
                         try:
                             obs = env.reset()
                             reset_done = True
