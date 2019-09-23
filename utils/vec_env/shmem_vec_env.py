@@ -117,6 +117,7 @@ class ShmemVecEnv(VecEnv):
         #print("collection done...")
         self.waiting_step = False
         obs, rews, dones, infos = zip(*outs)
+        print('.',end='')
         return self._decode_obses(obs), np.array(rews), np.array(dones), infos
 
     def close_extras(self):
