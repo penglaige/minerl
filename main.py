@@ -59,8 +59,8 @@ def main():
     aggregator = "reduceLocalMean"
     dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
-    if not train:
-        args.num_env_steps = 50000
+    #if not train:
+    #    args.num_env_steps = 50000
 
     base_kwargs = {
         'non_pixel_layer':non_pixel_layer,

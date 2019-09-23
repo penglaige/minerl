@@ -116,9 +116,9 @@ class ShmemVecEnv(VecEnv):
         print('s',end='')
         outs = [pipe.recv() for pipe in self.parent_pipes]
         #print("collection done...")
+        print('.',end='')
         self.waiting_step = False
         obs, rews, dones, infos = zip(*outs)
-        print('.',end='')
         return self._decode_obses(obs), np.array(rews), np.array(dones), infos
 
     def close_extras(self):
@@ -211,17 +211,17 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                                 obs = env.reset()
                                 reset_done = True
                             except:
-                                print("remake the env!")
-                                env.close()
-                                env = env_fn_wrapper.x()
+                                #print("remake the env!")
+                                #env.close()
+                                #env = env_fn_wrapper.x()
                                 print("reset failed! Try again!")
                         #obs = env.reset()
                         print("reset done!")
                     pipe.send((_write_obs(obs), reward, done, info))
                 except:
                     print("step failed!")
-                    env.close()
-                    env = env_fn_wrapper.x()
+                    #env.close()
+                    #env = env_fn_wrapper.x()
                     obs = env.reset()
                     print("Reset done!")
                     pipe.send((_write_obs(obs), 0, True, None))
