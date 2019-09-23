@@ -196,6 +196,9 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                             obs = env.reset()
                             reset_done = True
                         except:
+                            print("remake the env!")
+                            env.close()
+                            env = env_fn_wrapper.x()
                             print("reset failed! Try again!")
                     #obs = env.reset()
                     print("reset done!")
