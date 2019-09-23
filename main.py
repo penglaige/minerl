@@ -225,7 +225,7 @@ def main():
                 if done[i]:
                     ep += 1
                     ep_rewards.append(total_rewards[i])
-                    best_mean_episode_reward = log(j, ep, np.array(ep_rewards), best_mean_episode_reward)
+                    best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
 
                     total_rewards[i] = 0
             # ？

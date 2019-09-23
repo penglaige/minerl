@@ -121,7 +121,7 @@ class VecPyTorch(VecEnvWrapper):
         return obs, reward, done, info
 
     def close(self):
-        self.venv.close_extras()
+        self.venv.close()
 """
 class VecPyTorchFrameStack(VecEnvWrapper):
     def __init__(self, venv, nstack, device=None):

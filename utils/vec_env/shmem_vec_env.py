@@ -91,6 +91,7 @@ class ShmemVecEnv(VecEnv):
         self.viewer = None
 
     def reset(self):
+        print("initial reset...")
         if self.waiting_step:
             logger.warn('Called reset() while waiting for the step to complete')
             self.step_wait()
@@ -121,6 +122,15 @@ class ShmemVecEnv(VecEnv):
     def close_extras(self):
         if self.waiting_step:
             self.step_wait()
+        for pipe in self.parent_pipes:
+            pipe.send(('close', None))
+        for pipe in self.parent_pipes:
+            pipe.recv()
+            pipe.close()
+        for proc in self.procs:
+            proc.join()
+
+    def close(self):
         for pipe in self.parent_pipes:
             pipe.send(('close', None))
         for pipe in self.parent_pipes:
