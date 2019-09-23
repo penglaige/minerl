@@ -212,8 +212,6 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                     env = env_fn_wrapper.x()
                     obs = env.reset()
                     pipe.send((_write_obs(obs), 0, True, None))
-
-
             elif cmd == 'render':
                 pipe.send(env.render(mode='rgb_array'))
             elif cmd == 'close':
