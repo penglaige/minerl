@@ -109,7 +109,9 @@ class ShmemVecEnv(VecEnv):
 
 
     def step_wait(self):
+        print("start collecting outs...")
         outs = [pipe.recv() for pipe in self.parent_pipes]
+        print("collection done...")
         self.waiting_step = False
         obs, rews, dones, infos = zip(*outs)
         return self._decode_obses(obs), np.array(rews), np.array(dones), infos
@@ -185,6 +187,7 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                 if(not obs):
                     print("null obs!!!!!")
                 if done:
+                    print("reset....")
                     obs = env.reset()
                 pipe.send((_write_obs(obs), reward, done, info))
             elif cmd == 'render':
