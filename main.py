@@ -259,16 +259,24 @@ def main():
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             end = time.time()
             print("----------- Logs -------------")
-            print(
-                "Updates {}, num timesteps {}, FPS {} \nThe {}th training episodes,\nmean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
+            if len(ep_rewards) == 0:
+                print(
+                "Updates {}, num timesteps {}, FPS {} \nThe {}th training episodes,".format(
                     j, total_num_steps,
                     int(total_num_steps / (end - start)),
-                    len(ep_rewards),np.mean(ep_rewards),
-                    np.median(ep_rewards), np.min(ep_rewards),
-                    np.max(ep_rewards)
+                    len(ep_rewards))
                 )
+            else:
+                print(
+                    "Updates {}, num timesteps {}, FPS {} \nThe {}th training episodes,\nmean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".format(
+                        j, total_num_steps,
+                        int(total_num_steps / (end - start)),
+                        len(ep_rewards),np.mean(ep_rewards),
+                        np.median(ep_rewards), np.min(ep_rewards),
+                        np.max(ep_rewards)
+                    )
 
-            )
+                )
     
     print("-----------------------Training ends-----------------------")
     envs.close()
