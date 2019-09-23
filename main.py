@@ -196,7 +196,7 @@ def main():
             # step:
             #print(actions)
             obs, reward, done, infos = envs.step(actions)
-            print('.',end='')
+            #print('.',end='')
             if args.num_env_steps <= 50000:
                 envs.render()
 

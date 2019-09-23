@@ -113,10 +113,10 @@ class ShmemVecEnv(VecEnv):
     def step_wait(self):
         #print("time sleep...",)
         #time.sleep(0.01)
-        print('s',end='')
+        print('step.....',end='')
         outs = [pipe.recv() for pipe in self.parent_pipes]
         #print("collection done...")
-        print('.',end='')
+        print('done!')
         self.waiting_step = False
         obs, rews, dones, infos = zip(*outs)
         return self._decode_obses(obs), np.array(rews), np.array(dones), infos
@@ -198,33 +198,34 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                 pipe.send(_write_obs(env.reset()))
             elif cmd == 'step':
                 step_done = False
-                try:
-                    obs, reward, done, info = env.step(data)
-                    step_done = True
-                    #time.sleep(0.01)
-                    if done:
+                while not step_done:
+                    try:
+                        obs, reward, done, info = env.step(data)
+                        step_done = True
                         #time.sleep(0.01)
-                        print("reset....")
-                        reset_done = False
-                        while not reset_done:
-                            try:
-                                obs = env.reset()
-                                reset_done = True
-                            except:
-                                #print("remake the env!")
-                                #env.close()
-                                #env = env_fn_wrapper.x()
-                                print("reset failed! Try again!")
+                        if done:
+                            #time.sleep(0.01)
+                            print("reset....")
+                            reset_done = False
+                            while not reset_done:
+                                try:
+                                    obs = env.reset()
+                                    reset_done = True
+                                except:
+                                    #print("remake the env!")
+                                    #env.close()
+                                    #env = env_fn_wrapper.x()
+                                    print("....reset failed! Try again!")
+                            #obs = env.reset()
+                            print("reset done!")
+                        pipe.send((_write_obs(obs), reward, done, info))
+                    except:
+                        print(".....step failed! Try again!!")
+                        #env.close()
+                        #env = env_fn_wrapper.x()
                         #obs = env.reset()
-                        print("reset done!")
-                    pipe.send((_write_obs(obs), reward, done, info))
-                except:
-                    print("step failed!")
-                    #env.close()
-                    #env = env_fn_wrapper.x()
-                    obs = env.reset()
-                    print("Reset done!")
-                    pipe.send((_write_obs(obs), 0, True, None))
+                        #print("Reset done!")
+                        #pipe.send((_write_obs(obs), 0, True, None))
             elif cmd == 'render':
                 pipe.send(env.render(mode='rgb_array'))
             elif cmd == 'close':
