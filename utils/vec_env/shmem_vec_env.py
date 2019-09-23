@@ -112,7 +112,8 @@ class ShmemVecEnv(VecEnv):
 
     def step_wait(self):
         #print("time sleep...",)
-        time.sleep(0.01)
+        #time.sleep(0.01)
+        print('s',end='')
         outs = [pipe.recv() for pipe in self.parent_pipes]
         #print("collection done...")
         self.waiting_step = False
