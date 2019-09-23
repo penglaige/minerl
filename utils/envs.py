@@ -119,6 +119,9 @@ class VecPyTorch(VecEnvWrapper):
         #obs = torch.from_numpy(obs).float().to(self.device)
         #reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
         return obs, reward, done, info
+
+    def close(self):
+        self.venv.close_extras()
 """
 class VecPyTorchFrameStack(VecEnvWrapper):
     def __init__(self, venv, nstack, device=None):

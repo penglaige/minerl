@@ -271,7 +271,7 @@ def main():
             )
     
     print("-----------------------Training ends-----------------------")
-
+    envs.close()
 
 
 if __name__ == "__main__":
