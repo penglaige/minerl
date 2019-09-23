@@ -185,24 +185,35 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
             if cmd == 'reset':
                 pipe.send(_write_obs(env.reset()))
             elif cmd == 'step':
-                obs, reward, done, info = env.step(data)
-                #time.sleep(0.01)
-                if done:
-                    time.sleep(0.01)
-                    print("reset....")
-                    reset_done = False
-                    while not reset_done:
-                        try:
-                            obs = env.reset()
-                            reset_done = True
-                        except:
-                            print("remake the env!")
-                            env.close()
-                            env = env_fn_wrapper.x()
-                            print("reset failed! Try again!")
-                    #obs = env.reset()
-                    print("reset done!")
-                pipe.send((_write_obs(obs), reward, done, info))
+                step_done = False
+                try:
+                    obs, reward, done, info = env.step(data)
+                    step_done = True
+                    #time.sleep(0.01)
+                    if done:
+                        #time.sleep(0.01)
+                        print("reset....")
+                        reset_done = False
+                        while not reset_done:
+                            try:
+                                obs = env.reset()
+                                reset_done = True
+                            except:
+                                print("remake the env!")
+                                env.close()
+                                env = env_fn_wrapper.x()
+                                print("reset failed! Try again!")
+                        #obs = env.reset()
+                        print("reset done!")
+                    pipe.send((_write_obs(obs), reward, done, info))
+                except:
+                    print("step failed!")
+                    env.close()
+                    env = env_fn_wrapper.x()
+                    obs = env.reset()
+                    pipe.send((_write_obs(obs), 0, True, None))
+
+
             elif cmd == 'render':
                 pipe.send(env.render(mode='rgb_array'))
             elif cmd == 'close':
