@@ -255,7 +255,7 @@ def main():
 
             torch.save(actor_critic, os.path.join(save_path, args.task + ".pt"))
 
-        if j % args.log_interval == 0 and len(ep_rewards) > 0:
+        if j % args.log_interval == 0 and len(ep_rewards) >= 0:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             end = time.time()
             print("----------- Logs -------------")
