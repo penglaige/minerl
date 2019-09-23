@@ -188,8 +188,16 @@ def _subproc_worker(pipe, parent_pipe, env_fn_wrapper, obs_bufs, obs_shapes, obs
                 obs, reward, done, info = env.step(data)
                 #time.sleep(0.01)
                 if done:
+                    time.sleep(0.01)
                     print("reset....")
-                    obs = env.reset()
+                    reset_done = False
+                    while reset_done:
+                        try:
+                            obs = env.reset()
+                            reset_done = True
+                        except:
+                            print("reset failed! Try again!")
+                    #obs = env.reset()
                     print("reset done!")
                 pipe.send((_write_obs(obs), reward, done, info))
             elif cmd == 'render':
