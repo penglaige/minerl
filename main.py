@@ -146,10 +146,10 @@ def main():
     if args.frame_history_len > 1:
         last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
         pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-        pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
+        pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
     elif args.frame_history_len == 1:
         pov = pov.transpose(2, 0, 1) / 255.0
-        pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
+        pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
     else:
         raise NotImplementedError
 
@@ -204,10 +204,10 @@ def main():
             if args.frame_history_len > 1:
                 last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
                 pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-                pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
+                pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
             elif args.frame_history_len == 1:
                 pov = pov.transpose(2, 0, 1) / 255.0
-                pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
+                pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
             else:
                 raise NotImplementedError
 
