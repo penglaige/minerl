@@ -16,7 +16,6 @@ from utils.parser import get_args, parse_obs_space
 from utils.storage import RolloutStorage
 from utils.utils import *
 from utils.replay_buffer import ReplayBuffer
-from utils.envs import make_vec_envs
 
 from builtins import range
 from past.utils import old_div
@@ -96,11 +95,10 @@ def main():
     #obs_space = env.observation_space
     #act_space = env.action_space
     #action_template = env.action_space.noop()
-    envs = make_vec_envs(args.task, args.seed, args.num_processes,
-                    args.gamma, args.log_dir, device, False)
-    obs_space = envs.venv.obs_space
-    act_space = envs.venv.act_space
-    action_template = envs.venv.action_template
+    env = gym.make(args.task)
+    obs_space =env.observation_space
+    act_space = env.action_space
+    action_template = env.action_space.noop()
 
 
     # policy
@@ -138,19 +136,19 @@ def main():
                             args.num_steps, args.num_processes,
                             obs_space, act_space)
 
-    obs = envs.reset()
+    obs = env.reset()
     #print("reset obs pov size: ",obs['pov'].shape)
     # obs: key: inventory.dirt...
     # (num_processes, size)
 
-    #pov, non_pixel_feature = get_obs_features(obs_space, obs)
-    pov, non_pixel_feature = multi_get_obs_features(obs)
+    pov, non_pixel_feature = get_obs_features(obs_space, obs)
+    #pov, non_pixel_feature = multi_get_obs_features(obs)
     if args.frame_history_len > 1:
         last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
         pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
         pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
     elif args.frame_history_len == 1:
-        pov = pov.transpose(0, 3, 1, 2) / 255.0
+        pov = pov.transpose(2, 0, 1) / 255.0
         pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
     else:
         raise NotImplementedError
@@ -172,7 +170,8 @@ def main():
     ep_rewards = []
     #mean_episode_reward = -float('nan')
     best_mean_episode_reward = -float('inf')
-    total_rewards = [0 for i in range(args.num_processes)]
+    #total_rewards = [0 for i in range(args.num_processes)]
+    total_rewards = 0
 
     for j in range(num_updates):
         
@@ -198,37 +197,38 @@ def main():
             obs, reward, done, infos = envs.step(actions)
             #print('.',end='')
             if args.num_env_steps <= 50000:
-                envs.render()
+                env.render()
 
-            pov, non_pixel_feature = multi_get_obs_features(obs)
+            pov, non_pixel_feature = get_obs_features(obs_space, obs)
+            #pov, non_pixel_feature = multi_get_obs_features(obs)
             if args.frame_history_len > 1:
                 last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
                 pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
                 pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
             elif args.frame_history_len == 1:
-                pov = pov.transpose(0, 3, 1, 2) / 255.0
+                pov = pov.transpose(2, 0, 1) / 255.0
                 pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape[1:])
             else:
                 raise NotImplementedError
 
             non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(args.num_processes,-1)
 
-            for i in range(len(reward)):
-                total_rewards[i] += reward[i]
+            total_rewards += reward
+            #for i in range(len(reward)):
+            #    total_rewards[i] += reward[i]
             reward = torch.tensor([reward]).reshape(args.num_processes,-1).type(dtype)
 
             # TODO: may not need bas_masks
             masks = torch.FloatTensor(
-                [[0.0] if done_ else [1.0] for done_ in done])
-            bad_masks = torch.FloatTensor([[1.0] for info in infos])
+                [[0.0] if done else [1.0]])
+            bad_masks = torch.FloatTensor([[1.0]])
 
-            for i in range(len(done)):
-                if done[i]:
-                    ep += 1
-                    ep_rewards.append(total_rewards[i])
-                    best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
+            if done:
+                ep += 1
+                ep_rewards.append(total_rewards)
+                best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
 
-                    total_rewards[i] = 0
+                total_rewards = 0
             # ？
             rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
                 value, reward, masks, bad_masks)
@@ -280,7 +280,7 @@ def main():
                 )
     
     print("-----------------------Training ends-----------------------")
-    envs.close()
+    env.close()
 
 
 if __name__ == "__main__":

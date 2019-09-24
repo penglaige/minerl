@@ -113,7 +113,7 @@ def get_args():
     parser.add_argument(
         '--num-processes',
         type=int,
-        default=2,
+        default=1,
         help='how many traing CPU processes to use (default: 1)')
     parser.add_argument(
         '--num-steps',
