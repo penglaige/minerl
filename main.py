@@ -188,13 +188,13 @@ def main():
             # actions size: torch.Tensor num_processes x num_branches
             # action_log_probs : torch.Tensor num_processes x num_branches
             #print(actions)
-            #actions_list = actions.squeeze().tolist()
+            actions_list = actions.squeeze().tolist()
 
-            #action = get_actions_continuous(actions_list, act_space, action_template)
+            action = get_actions_continuous(actions_list, act_space, action_template)
 
             # step:
             #print(actions)
-            obs, reward, done, infos = envs.step(actions)
+            obs, reward, done, infos = env.step(actions)
             #print('.',end='')
             if args.num_env_steps <= 50000:
                 env.render()
