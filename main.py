@@ -190,10 +190,10 @@ def main():
             #print(actions)
             actions_list = actions.squeeze().tolist()
 
-            action = get_actions_continuous(actions_list, act_space, action_template)
+            actions = get_actions_continuous(actions_list, act_space, action_template)
 
             # step:
-            #print(actions)
+            print(actions)
             obs, reward, done, infos = env.step(actions)
             #print('.',end='')
             if args.num_env_steps <= 50000:
