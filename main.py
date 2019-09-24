@@ -228,6 +228,21 @@ def main():
                 ep_rewards.append(total_rewards)
                 best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
 
+                obs = env.reset()
+                pov, non_pixel_feature = get_obs_features(obs_space, obs)
+                #pov, non_pixel_feature = multi_get_obs_features(obs)
+                if args.frame_history_len > 1:
+                    last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
+                    pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
+                    pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
+                elif args.frame_history_len == 1:
+                    pov = pov.transpose(2, 0, 1) / 255.0
+                    pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
+                else:
+                    raise NotImplementedError
+                non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(args.num_processes,-1)
+
+
                 total_rewards = 0
             # ？
             rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
