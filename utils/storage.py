@@ -90,6 +90,8 @@ class RolloutStorage():
 
     def after_update(self):
         self.obs[0].copy_(self.obs[-1])
+        if self.non_pixel_input_size > 0:
+            self.non_pixel_obs[0].copy_(self.non_pixel_obs[-1])
         self.masks[0].copy_(self.masks[-1])
         self.bad_masks[0].copy_(self.bad_masks[-1])
 
@@ -169,3 +171,76 @@ class RolloutStorage():
 
             yield obs_batch, non_pixel_obs_batch, actions_batch, value_preds_batch, return_batch, \
                     masks_batch, old_action_log_probs_batch, adv_targ
+
+class NewRolloutStorage(RolloutStorage):
+    def __init__(self, replay_buffer, frame_history_len, num_steps, num_processes, obs_space, act_space):
+        super(NewRolloutStorage, self).__init__()
+
+        self.temp_obs = torch.zeros(num_processes, num_steps, *self.pixel_shape)
+        if self.non_pixel_input_size > 0:
+            self.temp_non_pixel_obs = torch.zeros(num_processes, num_steps + 1, self.non_pixel_input_size)
+        self.temp_rewards = torch.zeros(num_processes, num_steps, 1)
+        self.temp_value_preds = torch.zeros(num_processes, num_steps + 1, 1)
+        self.temp_actions = torch.zeros(num_processes， num_steps, self.num_branches)
+        self.temp_action_log_probs = torch.zeros(num_processes, num_steps, self.num_branches)
+        self.temp_actions = self.temp_actions.type(dtype)
+
+        self.temp_masks = torch.ones(num_processes, num_steps + 1, 1)
+
+        self.temp_bad_masks = torch.ones(num_processes, num_steps + 1, 1)
+
+    def to(self, device):
+        self.obs = self.obs.to(device)
+        if self.non_pixel_input_size > 0:
+            self.non_pixel_obs = self.non_pixel_obs.to(device)
+        self.rewards = self.rewards.to(device)
+        self.value_preds = self.value_preds.to(device)
+        self.returns = self.returns.to(device)
+        self.action_log_probs = self.action_log_probs.to(device)
+        self.actions = self.actions.to(device)
+        self.masks = self.masks.to(device)
+        self.bad_masks = self.bad_masks.to(device)
+
+        self.temp_obs = self.temp_obs.to(device)
+        if self.non_pixel_input_size > 0:
+            self.temp_non_pixel_obs = self.temp_non_pixel_obs.to(device)
+        self.temp_rewards = self.temp_rewards.to(device)
+        self.temp_value_preds = self.temp_value_preds.to(device)
+        self.returns = self.returns.to(device)
+        self.temp_action_log_probs = self.temp_action_log_probs.to(device)
+        self.temp_actions = self.temp_actions.to(device)
+        self.temp_masks = self.temp_masks.to(device)
+        self.temp_bad_masks = self.temp_bad_masks.to(device)
+
+    def temp_insert(self, process, step, obs, non_pixel_obs,actions, action_log_probs,
+                value_preds, rewards, masks, bad_masks):
+        #obs: c h w
+        self.temp_obs[process][step + 1].copy_(obs)
+        if self.non_pixel_input_size > 0:
+            self.temp_non_pixel_obs[process][step + 1].copy_(non_pixel_obs)
+        self.temp_actions[process][step].copy_(actions)
+        self.temp_action_log_probs[process][step].copy_(action_log_probs)
+        self.temp_value_preds[process][step].copy_(value_preds)
+        self.temp_rewards[process][step].copy_(rewards)
+        self.temp_masks[process][step + 1].copy_(masks)
+        self.temp_bad_masks[process][step + 1].copy_(bad_masks)
+
+    
+    def after_update(self):
+        self.temp_obs[:,0].copy_(self.temp_obs[:,-1])
+        if self.non_pixel_input_size > 0:
+            self.temp_non_pixel_obs[:,0].copy_(self.temp_non_pixel_obs[:,-1])
+        self.temp_masks[:,0].copy_(self.temp_masks[:,-1])
+        self.temp_bad_masks[:,0].copy_(self.temp_bad_masks[:,-1])
+        
+    def _transpose(self):
+        self.obs = self.temp_obs.transpose(1, 0, 2, 3, 4)
+        if self.non_pixel_input_size > 0:
+            self.non_pixel_obs = self.temp_non_pixel_obs.transpose(1, 0, 2)
+        self.rewards = self.temp_rewards.transpose(1, 0, 2)
+        self.value_preds = self.temp_value_preds.transpose(1, 0, 2)
+        self.action_log_probs = self.temp_action_log_probs.transpose(1, 0 ,2)
+        self.actions = self.temp_actions.transpose(1, 0, 2)
+        self.masks = self.temp_masks.transpose(1, 0 ,2)
+        self.bad_masks = self.temp_bad_masks.transpose(1, 0, 2)
+

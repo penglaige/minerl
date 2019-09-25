@@ -161,6 +161,6 @@ def log(j, task,ep, ep_rewards, best_mean_episode_reward):
         pickle.dump(data,f)
         f.close()
 
-    return mean_episode_reward
+    return best_mean_episode_reward
 
 
