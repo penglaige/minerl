@@ -156,7 +156,7 @@ def log(j, task,ep, ep_rewards, best_mean_episode_reward):
         if not os.path.exists("perform_records"):
             os.makedirs("perform_records")
 
-        save_path = "perform_records/" + task + f"-ep{ep}.pkl"
+        save_path = "perform_records/" + task + ".pkl"
         f = open(save_path,"wb")
         pickle.dump(data,f)
         f.close()

@@ -174,14 +174,15 @@ class RolloutStorage():
 
 class NewRolloutStorage(RolloutStorage):
     def __init__(self, replay_buffer, frame_history_len, num_steps, num_processes, obs_space, act_space):
-        super(NewRolloutStorage, self).__init__()
+        super(NewRolloutStorage, self).__init__(replay_buffer, frame_history_len, num_steps,
+                                        num_processes, obs_space, act_space)
 
-        self.temp_obs = torch.zeros(num_processes, num_steps, *self.pixel_shape)
+        self.temp_obs = torch.zeros(num_processes, num_steps + 1, *self.pixel_shape)
         if self.non_pixel_input_size > 0:
             self.temp_non_pixel_obs = torch.zeros(num_processes, num_steps + 1, self.non_pixel_input_size)
         self.temp_rewards = torch.zeros(num_processes, num_steps, 1)
         self.temp_value_preds = torch.zeros(num_processes, num_steps + 1, 1)
-        self.temp_actions = torch.zeros(num_processes， num_steps, self.num_branches)
+        self.temp_actions = torch.zeros(num_processes, num_steps, self.num_branches)
         self.temp_action_log_probs = torch.zeros(num_processes, num_steps, self.num_branches)
         self.temp_actions = self.temp_actions.type(dtype)
 
@@ -234,13 +235,13 @@ class NewRolloutStorage(RolloutStorage):
         self.temp_bad_masks[:,0].copy_(self.temp_bad_masks[:,-1])
         
     def _transpose(self):
-        self.obs = self.temp_obs.transpose(1, 0, 2, 3, 4)
+        self.obs.copy_(self.temp_obs.transpose(0,1))
         if self.non_pixel_input_size > 0:
-            self.non_pixel_obs = self.temp_non_pixel_obs.transpose(1, 0, 2)
-        self.rewards = self.temp_rewards.transpose(1, 0, 2)
-        self.value_preds = self.temp_value_preds.transpose(1, 0, 2)
-        self.action_log_probs = self.temp_action_log_probs.transpose(1, 0 ,2)
-        self.actions = self.temp_actions.transpose(1, 0, 2)
-        self.masks = self.temp_masks.transpose(1, 0 ,2)
-        self.bad_masks = self.temp_bad_masks.transpose(1, 0, 2)
+            self.non_pixel_obs.copy_(self.temp_non_pixel_obs.transpose(0,1))
+        self.rewards.copy_(self.temp_rewards.transpose(0,1))
+        self.value_preds.copy_(self.temp_value_preds.transpose(0,1))
+        self.action_log_probs.copy_(self.temp_action_log_probs.transpose(0,1))
+        self.actions.copy_(self.temp_actions.transpose(0,1))
+        self.masks.copy_(self.temp_masks.transpose(0,1))
+        self.bad_masks.copy_(self.temp_bad_masks.transpose(0,1))
 

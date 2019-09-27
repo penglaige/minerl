@@ -13,7 +13,7 @@ from model import Policy
 from ppo import PPO
 from utils.schedules import *
 from utils.parser import get_args, parse_obs_space
-from utils.storage import RolloutStorage
+from utils.storage import RolloutStorage, NewRolloutStorage
 from utils.utils import *
 from utils.replay_buffer import ReplayBuffer
 
@@ -115,8 +115,8 @@ def main():
                     args.num_mini_batch,
                     args.value_loss_coef,
                     args.entropy_coef,
-                    lr=7e-4,
-                    eps=1e-5,
+                    lr=args.lr,
+                    eps=args.eps,
                     max_grad_norm=args.max_grad_norm,
         )
     else:
@@ -124,15 +124,15 @@ def main():
 
     # storage
     replay_buffer = None
+    _, _, non_pixel_shape = parse_obs_space(obs_space)
+    add_non_pixel = True if non_pixel_shape > 0 else False
     if args.frame_history_len > 1:
-        _, _, non_pixel_shape = parse_obs_space(obs_space)
-        add_non_pixel = True if non_pixel_shape > 0 else False
         replay_buffer = ReplayBuffer(100000,
                                     args.frame_history_len, 
                                     non_pixel_shape,
                                     add_non_pixel)
 
-    rollouts = RolloutStorage(replay_buffer, args.frame_history_len, 
+    rollouts = NewRolloutStorage(replay_buffer, args.frame_history_len, 
                             args.num_steps, args.num_processes,
                             obs_space, act_space)
 
@@ -146,17 +146,20 @@ def main():
     if args.frame_history_len > 1:
         last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
         pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-        pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
+        pov = torch.from_numpy(pov.copy()).reshape(*pov.shape)
     elif args.frame_history_len == 1:
         pov = pov.transpose(2, 0, 1) / 255.0
-        pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
+        pov = torch.from_numpy(pov.copy()).reshape(*pov.shape)
     else:
         raise NotImplementedError
 
-    non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(args.num_processes,-1)
+    non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0)
 
-    rollouts.obs[0].copy_(pov)
-    rollouts.non_pixel_obs[0].copy_(non_pixel_feature)
+    #rollouts.obs[0].copy_(pov)
+    #rollouts.non_pixel_obs[0].copy_(non_pixel_feature)
+    rollouts.temp_obs[0][0].copy_(pov)
+    if add_non_pixel:
+        rollouts.temp_non_pixel_obs[0][0].copy_(non_pixel_feature)
     rollouts.to(device)
 
     # ?
@@ -174,81 +177,91 @@ def main():
     total_rewards = 0
 
     for j in range(num_updates):
-        
-        for step in range(args.num_steps):
-            # num_steps = 5
-            # Sample actions
-            with torch.no_grad():
-                # actor_critic.act output size
-                # actions: torch.Tensor, not list
-                value, actions, action_log_probs = actor_critic.act(rollouts.obs[step],
-                    rollouts.non_pixel_obs[step])
+        for process in range(args.num_processes):
+            if process > 0:
+                rollouts.temp_obs[process][0].copy_(rollouts.temp_obs[process-1][-1])
+                if add_non_pixel:
+                    rollouts.temp_non_pixel_obs[process][0].copy_(rollouts.temp_non_pixel_obs[process-1][-1])
+            
+            for step in range(args.num_steps):
+                # num_steps = 5
+                # Sample actions
+                with torch.no_grad():
+                    # actor_critic.act output size
+                    # actions: torch.Tensor, not list
+                    value, actions, action_log_probs = actor_critic.act(rollouts.temp_obs[process][step].unsqueeze(0),
+                        rollouts.temp_non_pixel_obs[process][step].unsqueeze(0))
 
-            # value size: batch x 1
-            # actions size: torch.Tensor num_processes x num_branches
-            # action_log_probs : torch.Tensor num_processes x num_branches
-            #print(actions)
-            actions_list = actions.squeeze().tolist()
+                # value size: batch x 1
+                # actions size: torch.Tensor num_processes x num_branches
+                # action_log_probs : torch.Tensor num_processes x num_branches
+                #print(actions)
+                actions_list = actions.squeeze().tolist()
 
-            action = get_actions_continuous(actions_list, act_space, action_template)
+                action = get_actions_continuous(actions_list, act_space, action_template)
 
-            # step:
-            #print(actions)
-            obs, reward, done, infos = env.step(action)
-            #print('.',end='')
-            if args.num_env_steps <= 50000:
-                env.render()
+                # step:
+                #print(actions)
+                obs, reward, done, infos = env.step(action)
+                #print('.',end='')
+                if args.num_env_steps <= 50000:
+                    env.render()
 
-            pov, non_pixel_feature = get_obs_features(obs_space, obs)
-            #pov, non_pixel_feature = multi_get_obs_features(obs)
-            if args.frame_history_len > 1:
-                last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
-                pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-                pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
-            elif args.frame_history_len == 1:
-                pov = pov.transpose(2, 0, 1) / 255.0
-                pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
-            else:
-                raise NotImplementedError
-
-            non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(args.num_processes,-1)
-
-            total_rewards += reward
-            #for i in range(len(reward)):
-            #    total_rewards[i] += reward[i]
-            reward = torch.tensor([reward]).reshape(args.num_processes,-1).type(dtype)
-
-            # TODO: may not need bas_masks
-            masks = torch.FloatTensor(
-                [[0.0] if done else [1.0]])
-            bad_masks = torch.FloatTensor([[1.0]])
-
-            if done:
-                ep += 1
-                ep_rewards.append(total_rewards)
-                best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
-
-                obs = env.reset()
                 pov, non_pixel_feature = get_obs_features(obs_space, obs)
                 #pov, non_pixel_feature = multi_get_obs_features(obs)
                 if args.frame_history_len > 1:
                     last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
                     pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
-                    pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
+                    pov = torch.from_numpy(pov.copy()).reshape(*pov.shape)
                 elif args.frame_history_len == 1:
                     pov = pov.transpose(2, 0, 1) / 255.0
-                    pov = torch.from_numpy(pov.copy()).reshape(args.num_processes,*pov.shape)
+                    pov = torch.from_numpy(pov.copy()).reshape(*pov.shape)
                 else:
                     raise NotImplementedError
-                non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0).reshape(args.num_processes,-1)
+
+                non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0)
+
+                total_rewards += reward
+                #for i in range(len(reward)):
+                #    total_rewards[i] += reward[i]
+                reward = torch.tensor([reward]).type(dtype)
+
+                # TODO: may not need bas_masks
+                masks = torch.FloatTensor(
+                    [0.0] if done else [1.0])
+                bad_masks = torch.FloatTensor([1.0])
+
+                if done:
+                    ep += 1
+                    ep_rewards.append(total_rewards)
+                    best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
+
+                    obs = env.reset()
+                    pov, non_pixel_feature = get_obs_features(obs_space, obs)
+                    #pov, non_pixel_feature = multi_get_obs_features(obs)
+                    if args.frame_history_len > 1:
+                        last_stored_frame_idx = replay_buffer.store_frame(pov, non_pixel_feature)
+                        pov = replay_buffer.encode_recent_observation() / 255.0 # 12 h w
+                        pov = torch.from_numpy(pov.copy()).reshape(*pov.shape)
+                    elif args.frame_history_len == 1:
+                        pov = pov.transpose(2, 0, 1) / 255.0
+                        pov = torch.from_numpy(pov.copy()).reshape(*pov.shape)
+                    else:
+                        raise NotImplementedError
+                    non_pixel_feature = (torch.tensor(non_pixel_feature) / 180.0)
 
 
-                total_rewards = 0
-            # ？
-            rollouts.insert(pov, non_pixel_feature, actions, action_log_probs,
-                value, reward, masks, bad_masks)
+                    total_rewards = 0
+                # ？
+                value = value.squeeze()
+                actions = actions.squeeze()
+                action_log_probs = action_log_probs.squeeze()
+                rollouts.temp_insert(process, step, pov, non_pixel_feature, actions, action_log_probs,
+                    value, reward, masks, bad_masks)
 
 
+        # after step all processes and all steps
+        rollouts._transpose()
         with torch.no_grad():
             next_value = actor_critic.get_value(
                 rollouts.obs[-1], rollouts.non_pixel_obs[-1])

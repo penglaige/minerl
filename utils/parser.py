@@ -41,7 +41,7 @@ def get_args():
     parser.add_argument(
         '--eps',
         type=float,
-        default=0.01,
+        default=1e-8,
         help='RMSprop optimizer epsilon (default: 1e-5)')
     parser.add_argument(
         '--alpha',
@@ -123,7 +123,7 @@ def get_args():
     parser.add_argument(
         '--ppo-epoch',
         type=int,
-        default=4,
+        default=3,
         help='number of ppo epochs (default:4)')
     parser.add_argument(
         '--num-mini-batch',
