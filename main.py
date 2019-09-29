@@ -283,6 +283,9 @@ def main():
                 pass
 
             torch.save(actor_critic, os.path.join(save_path, args.task + ".pt"))
+            
+        if j == num_updates - 1:
+            best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
 
         if j % args.log_interval == 0 and len(ep_rewards) >= 0:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
