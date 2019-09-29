@@ -16,7 +16,7 @@ def sample_n_unique(sampling_f, n):
     return res
 
 class ReplayBuffer():
-    def __init__(self, size, frame_history_len, non_pixel_dimension, add_non_pixel=False):
+    def __init__(self, size, frame_history_len,non_pixel_dimension, add_non_pixel=False):
         """This is a memory efficient implementation of the replay buffer.
         The sepecific memory optimizations use here are:
             - only store each frame once rather than k times
@@ -154,7 +154,7 @@ class ReplayBuffer():
             img_h, img_w = self.obs.shape[2], self.obs.shape[3]
             return self.obs[start_idx:end_idx].reshape(-1, img_h, img_w)
 
-    def store_frame(self, frame, non_pixel_feature):
+    def store_frame(self, frame, non_pixel_feature, num_branches):
         """Store a single frame in the buffer at the next available index, overwriting
         old frames if necessary.
         Parameters
@@ -173,7 +173,7 @@ class ReplayBuffer():
 
         if self.obs is None:
             self.obs      = np.empty([self.size] + list(frame.shape), dtype=np.uint8)
-            self.action   = np.empty([self.size],                     dtype=np.int32)
+            self.action   = np.empty([self.size, num_branches],       dtype=np.float32)
             self.reward   = np.empty([self.size],                     dtype=np.float32)
             self.done     = np.empty([self.size],                     dtype=np.bool)
             if self.add_non_pixel:

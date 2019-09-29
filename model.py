@@ -145,6 +145,31 @@ class Policy(nn.Module):
         # dist_entropys: [dist_entropy:  tensor(0.6931, grad_fn=<MeanBackward0>) torch.Size([]) ]
         return value, action_log_probs, dist_entropys
 
+class demoPolicy(Policy):
+    def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
+        super(demoPolicy, self).__init__(obs_space, action_space, base, base_kwargs)
+
+    def demo_act(self, x, non_pixel_features, deterministic=False):
+        _, actor_features = self.base(x, non_pixel_features)
+
+        # calculate dist for different branches
+        #batch_size = x.size(0)
+        action_probs = []
+
+        for i in range(self.num_branches):
+            idx = self.dist_idxes[i]
+            # actor_feature: torch (batch, 128)
+            actor_feature = actor_features[i]
+            #dist = self.__getattr__("dist" + str(idx))(actor_feature)
+            #dists.append(dist)
+
+            action_prob = self.__getattr__("dist" + str(idx)).get_prob(actor_feature)
+            
+            action_prob = action_prob.type(dtype)
+            action_probs.append(action_prob)
+
+        return action_probs
+
 
                   
 class Branch_CNNBase(nn.Module):

@@ -9,13 +9,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from model import Policy
+from model import Policy, demoPolicy
 from ppo import PPO
 from utils.schedules import *
 from utils.parser import get_args, parse_obs_space
 from utils.storage import RolloutStorage, NewRolloutStorage
 from utils.utils import *
 from utils.replay_buffer import ReplayBuffer
+from demo import Demo
 
 from builtins import range
 from past.utils import old_div
@@ -102,10 +103,17 @@ def main():
 
 
     # policy
-    actor_critic = Policy(obs_space, 
-                        act_space,
-                        base_kwargs=base_kwargs)
+    if args.demo:
+        actor_critic = demoPolicy(obs_space, 
+                            act_space,
+                            base_kwargs=base_kwargs)
+    else:
+        actor_critic = Policy(obs_space, 
+                            act_space,
+                            base_kwargs=base_kwargs)
     actor_critic.to(device)
+
+    #optimizer = optim.Adam(actor_critic.parameters(), lr=args.lr, eps=args.eps)
 
     # algorithm
     if args.algo == 'ppo':
@@ -135,6 +143,20 @@ def main():
     rollouts = NewRolloutStorage(replay_buffer, args.frame_history_len, 
                             args.num_steps, args.num_processes,
                             obs_space, act_space)
+
+    # pre-train 
+    if args.demo:
+        demo = Demo(args.task, args.replay_buffer_size, 
+                    obs_space, act_space,
+                    args.frame_history_len, add_non_pixel,
+                    non_pixel_shape)
+        print('------- Start to store demo data! -------')
+        demo.store_demo_data()
+        print('------- Demo data prepared! -------------')
+        print('--- Pre-train..... ------')
+        demo.pre_train(agent.actor_critic, agent.optimizer, args.num_mini_batch, args.pre_train_steps)
+        print('--- Pre-train done! ------')
+
 
     obs = env.reset()
     #print("reset obs pov size: ",obs['pov'].shape)
@@ -189,8 +211,12 @@ def main():
                 with torch.no_grad():
                     # actor_critic.act output size
                     # actions: torch.Tensor, not list
-                    value, actions, action_log_probs = actor_critic.act(rollouts.temp_obs[process][step].unsqueeze(0),
-                        rollouts.temp_non_pixel_obs[process][step].unsqueeze(0))
+                    if add_non_pixel:
+                        value, actions, action_log_probs = actor_critic.act(rollouts.temp_obs[process][step].unsqueeze(0),
+                            rollouts.temp_non_pixel_obs[process][step].unsqueeze(0))
+                    else:
+                        value, actions, action_log_probs = actor_critic.act(rollouts.temp_obs[process][step].unsqueeze(0),
+                            None)
 
                 # value size: batch x 1
                 # actions size: torch.Tensor num_processes x num_branches
@@ -263,8 +289,12 @@ def main():
         # after step all processes and all steps
         rollouts._transpose()
         with torch.no_grad():
-            next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.non_pixel_obs[-1])
+            if add_non_pixel:
+                next_value = actor_critic.get_value(
+                    rollouts.obs[-1], rollouts.non_pixel_obs[-1])
+            else:
+                next_value = actor_critic.get_value(
+                    rollouts.obs[-1], None)
 
         rollouts.compute_returns(next_value, args.use_gae, args.gamma,
             args.gae_lambda, args.use_proper_time_limits)
@@ -283,7 +313,7 @@ def main():
                 pass
 
             torch.save(actor_critic, os.path.join(save_path, args.task + ".pt"))
-            
+
         if j == num_updates - 1:
             best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
 

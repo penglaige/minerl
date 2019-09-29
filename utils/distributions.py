@@ -88,6 +88,10 @@ class Categorical(nn.Module):
     def forward(self, x):
         x = self.linear(x)
         return FixedCategorical(logits=x)
+    
+    def get_prob(self, x):
+        x = self.linear(x)
+        return x
 
 class DiagGaussian(nn.Module):
     def __init__(self, num_inputs, num_outputs):
@@ -108,6 +112,10 @@ class DiagGaussian(nn.Module):
 
         action_logstd = self.logstd(zeros)
         return FixedNormal(action_mean, action_logstd.exp())
+
+    def get_prob(self, x):
+        action_mean = self.fc_mean(x)
+        return action_mean
 
 class Bernoulli(nn.Module):
     def __init__(self, num_inputs, num_outputs):

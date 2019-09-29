@@ -113,7 +113,7 @@ def camera_transform(x):
         y = round(x / 10)
     return y
 
-def transfer_actions(action, act_space):
+def transfer_actions(action, act_space, continuoues=False):
     """
     transfer action_space in env to action [1,1,1....]
     """
@@ -128,12 +128,19 @@ def transfer_actions(action, act_space):
             action_spaces.append(len(act_space[act].values))
             res.append(action[act])
         elif act == 'camera':
-            res.append(camera_transform(action[act][0]))
-            res.append(camera_transform(action[act][1]))
-            action_spaces.append(36)
-            action_spaces.append(36)
+            if continuoues:
+                res.append(action[act][0])
+                res.append(action[act][1])
+                action_spaces.append(1)
+                action_spaces.append(1)
+            else:
+                res.append(camera_transform(action[act][0]))
+                res.append(camera_transform(action[act][1]))
+                action_spaces.append(36)
+                action_spaces.append(36)
 
     return res
+
 
 def log(j, task,ep, ep_rewards, best_mean_episode_reward):
     Save_Reward_Every_N_EPs = 10
