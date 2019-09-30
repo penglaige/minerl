@@ -152,6 +152,8 @@ class Demo():
                 else:
                     loss += branch_loss
             
+            loss /= len(action_probs)
+            
             optimizer.zero_grad()
 
             loss.backward()
