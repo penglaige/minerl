@@ -86,7 +86,8 @@ class Demo():
             except RuntimeError:
                 print(f"stream {stream} is corrupted!")
                 continue
-
+        print(total_frames)
+        print(self.buffer.num_in_buffer)
         assert total_frames == self.buffer.num_in_buffer
         print(f"total frames {total_frames}")
         return total_frames
