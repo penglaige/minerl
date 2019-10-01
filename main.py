@@ -263,8 +263,8 @@ def main():
                     best_mean_episode_reward = log(j, args.task,ep, np.array(ep_rewards), best_mean_episode_reward)
 
                     # using human demo:
-                    if args.demo:
-                        demo.pre_train(agent.actor_critic, agent.optimizer, args.num_mini_batch, args.pre_train_steps // 10)
+                    if args.demo and ep > 1 and ep % 4 == 0 and ep <= 600:
+                        demo.pre_train(agent.actor_critic, agent.optimizer, args.num_mini_batch, args.pre_train_steps // 100)
 
                     obs = env.reset()
                     pov, non_pixel_feature = get_obs_features(obs_space, obs)
